@@ -51,12 +51,14 @@ footer {
 }
 
 .settings {
-	width:50%;
-	height:100%;
+	width: 50%;
+	height: 100%;
 	background: var(--bg2);
-	float:left;
+	float: left;
 	box-sizing: border-box;
-	padding:10px;
+	padding: 10px;
+	overflow-y: auto;
+	border-right: var(--border-size) solid var(--color1);
 }
 
 #table-scroll {
@@ -72,11 +74,11 @@ footer {
 }
 
 .help-line {
-	background-color:#bbc5cb;
+	background-color: var(--bg2);
 }
 
 .help-line:hover {
-	background-color:#adb6bc;
+	background-color: var(--bg1);
 }
 
 .help-func {
@@ -93,6 +95,7 @@ footer {
 #cnv-div {
 	border: var(--color1) var(--border-size) solid;
 	border-radius: var(--round);
+	/*box-sizing: content-box;*/
 	margin: 20px auto;
 	width: 500px;
 	height: 400px;

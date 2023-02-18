@@ -1,5 +1,4 @@
 const COOKIE_LIFE = 7;
-const CANVAS_PADDING = 30;
 
 const CLR_VALID = "#d9d7d7";          // input valid value color
 const CLR_ERROR = "#be7074";       // input invalid value color
@@ -27,6 +26,7 @@ const ID_HELP_DESCR = 'help-descr';
 
 var drawer;
 var functions;
+var resizeObserver;
 
 function onError(drw, err) {
   debug(err);
@@ -60,21 +60,29 @@ function onResizeCanvas() {
   let body = $('body')[0];
   
   // Вся канва
+  let style = window.getComputedStyle(div, null);
+  let h = parseInt(style.getPropertyValue("height"));
+  let w = parseInt(style.getPropertyValue("width"));
+  const dy = 12;
   let rect = div.getBoundingClientRect();
-  let w = Math.trunc(rect.width);
-  let h = Math.trunc(rect.height);
-  drawer.canvasCoord.set(0, 0, w, h);
+//  let w = Math.trunc(rect.width);
+//  let h = Math.trunc(rect.height);
+  drawer.canvasCoord.set(0, 0, w, h - dy);
+  
+  //console.log(w, h);
   
   // область графика
   drawer.graphCoord.set(
-    drawer.canvasCoord.x1 + CANVAS_PADDING,
-    drawer.canvasCoord.y1 + CANVAS_PADDING,
-    drawer.canvasCoord.x2 - CANVAS_PADDING,
-    drawer.canvasCoord.y2 - CANVAS_PADDING);
+    drawer.canvasCoord.x1 + Drawer.CANVAS_PADDING,
+    drawer.canvasCoord.y1 + Drawer.CANVAS_PADDING,
+    drawer.canvasCoord.x2 - Drawer.CANVAS_PADDING,
+    drawer.canvasCoord.y2 - Drawer.CANVAS_PADDING);
   
   lbl.innerText = `${w}\u00D7${h}`;
   cnv.setAttribute("width", w);
-  cnv.setAttribute("height", h);
+  cnv.setAttribute("height", h - dy);
+  
+  // move the Resize icon at bottom-right corner
   body.style.backgroundPositionX = Math.trunc(rect.x + w + window.scrollX) + 'px';
   body.style.backgroundPositionY = Math.trunc(rect.y + h + window.scrollY) + 'px';
   
@@ -211,6 +219,13 @@ function loadPage() {
   createHelp();
   drawer = new Drawer('#cnv');
   drawer.onError = onError;
+  
+  resizeObserver = new ResizeObserver(entries => {
+    onResizeCanvas();
+  });
+  resizeObserver.observe($(ID_CANVAS_DIV)[0]);
+  resizeObserver.observe($('body')[0]);
+  
   loadCookies();
   onResizeCanvas(); // <= redraw here
   onInput(); // <= redraw here

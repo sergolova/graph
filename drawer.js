@@ -1,27 +1,49 @@
-''
-
 // set static fields
-Drawer.DEFAULT_GRID = 10;
-Drawer.DEFAULT_ZOOM_STEP = 20;
+Drawer.DEF_GRID_COUNT = 10;
+Drawer.DEF_ZOOM_STEP = 20;
+Drawer.CANVAS_PADDING = 30;
+Drawer.ARROW_SIZE = 5;  // axis arrow size
+Drawer.SERIF_SIZE = 4;  // axis serif size
+Drawer.CURSOR_RAD = 2;
+Drawer.POINT_TEXT_INDENT = 10;
+
+// colors
+Drawer.CLR_CANVAS_BG = 1;
+Drawer.CLR_GRAPH_BG = "#EEE";
+Drawer.CLR_GRID = "#BBB";
+Drawer.CLR_AXIS = "#555";
+Drawer.CLR_ZERO_CROSS = "#444";
+Drawer.CLR_CURSOR_CROSS = '#00779D';
+Drawer.CLR_CURSOR_Y = '#159d00';
+Drawer.CLR_CURSOR_Y_TEXT = '#0c5d00';
+Drawer.CLR_CURSOR_TEXT = '#004257';
+Drawer.CLR_SERIF = "#555";
+Drawer.CLR_SERIF_TEXT = '#44A';
+Drawer.CLR_FORMULA = "#F40";
+Drawer.CLR_SEL_FW = 'rgba(200,100,100,0.6)';
+Drawer.CLR_SEL_FW_BG = 'rgba(200,100,100,0.3)';
+Drawer.CLR_SEL_FW_TEXT = 'rgba(200,100,100,1)';
+Drawer.CLR_SEL_RV = 'rgba(0,66,87,0.6)';
+Drawer.CLR_SEL_RV_BG = 'rgb(0,119,157,0.3)';
+Drawer.CLR_SEL_RV_TEXT = 'rgba(0,66,87,1)';
+
 
 function Drawer(canvasID) {
-  // declare propertys
+  // declare properties
   this.context = null;
-  this.myObserver = null;
-  this.selCoord = new Coord(0, 0, 0, 0);          // текущая область выделения
+  this.selCoord = new Coord();          // текущая область выделения
+  this.curPoint = new Point();          // cursor point. Relative to the upper left corner of the canvas
   this.axisCoord = new Coord(-10, -10, 10, 10);   // Вычислительная система координат
   this.graphCoord = new Coord(40, 400, 600, 40);  // Размеры канвы графика
   this.canvasCoord = new Coord(0, 0, 1000, 1000); // Размеры всей канвы для рисования
   this.canvasData = null;
   this.formula = '';
-  this.gridCount = Drawer.DEFAULT_GRID;
-  this.zoomStep = Drawer.DEFAULT_ZOOM_STEP;
+  this.gridCount = Drawer.DEF_GRID_COUNT;
+  this.zoomStep = Drawer.DEF_ZOOM_STEP;
   this.quality = 1;  //
   this.onError = null;
   
   // declare private variables
-  this._ARROW_SIZE = 5;  // axis arrow size
-  this._SERIF_SIZE = 4;  // axis serif size
   this._timer = null; // redraw timer
   this._canvasData = null;
   
@@ -39,10 +61,6 @@ function Drawer(canvasID) {
   this.setEvents(canvasID);
 }
 
-const myObserver = new ResizeObserver(entries => {
-  onResizeCanvas();
-});
-
 Drawer.prototype.setEvents = function (canvasID) {
   let cnv = $(canvasID)[0];
   if (cnv.getContext) {
@@ -53,8 +71,6 @@ Drawer.prototype.setEvents = function (canvasID) {
     cnv.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
     cnv.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
     cnv.addEventListener('contextmenu', this.onCanvasContextMenu.bind(this));
-    myObserver.observe($(ID_CANVAS_DIV)[0]);
-    myObserver.observe($('body')[0]);
     
     return true;
   } else {
@@ -63,22 +79,19 @@ Drawer.prototype.setEvents = function (canvasID) {
     cnv.removeEventListener('mouseleave');
     cnv.removeEventListener('mouseup');
     cnv.removeEventListener('contextmenu');
-    cnv.removeEventListener('resize');
     return false;
   }
 };
 
 Drawer.prototype.onCanvasMouseDown = function () {
   let event = window.event;
-  this._zoom.leftBtnDown = !!(event.button == 0);
+  this._zoom.leftBtnDown = (event.button === 0);
   
   if (this._zoom.leftBtnDown) {
     this.selCoord.set1(event.offsetX, event.offsetY);
     // copy canvas image
     if (this._canvasData) {
       this.paste(this.canvasCoord.x1, this.canvasCoord.y1);
-    } else {
-      this.copy(this.canvasCoord);
     }
   }
 };
@@ -94,7 +107,12 @@ Drawer.prototype.onCanvasMouseMove = function () {
     clearInterval(this._zoom.timer);
     
     this.selCoord.set2(event.offsetX, event.offsetY);
+    this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawSelection();
+  } else {
+    this.curPoint = new Point(event.offsetX, event.offsetY);
+    this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
+    this.drawCursor();
   }
 };
 
@@ -133,7 +151,7 @@ Drawer.prototype.onZoomStart = function () {
     
     // так как зум анимированный и будет проходить this.zoomStep итераций,
     // нам нужно вычислить дельту для каждой координаты для одной итерации
-    // получаем разницу между начальной и конечной координотой и делим её на this.zoomStep.
+    // получаем разницу между начальной и конечной координатой и делим её на this.zoomStep.
     // для передачи дельт между функциями используем onZoom как объект
     
     sel.dbg('selection');
@@ -213,6 +231,7 @@ Drawer.prototype.redraw = function () {
     this._clearBorder();
     this._drawAxis();
     this._drawSerifsAndText(true, true);
+    this.copy();
     return true;
   } catch (err) {
     return this.callOnError(err.message);
@@ -225,6 +244,9 @@ Drawer.prototype.clearCanvas = function () {
 };
 
 Drawer.prototype.copy = function (coord) {
+  if (!coord) {
+    coord = this.canvasCoord;
+  }
   this.canvasData = this.context.getImageData(coord.x1, coord.y1, coord.x2, coord.y2);
 };
 
@@ -276,33 +298,120 @@ Drawer.prototype.selToAxis = function () {
   return new Coord(xa1, ya1, xa2, ya2);
 };
 
+Drawer.prototype.formatPointStr = function (x, y) {
+  return `(${x.toFixed(1)}, ${y.toFixed(1)})`
+};
+
+Drawer.prototype.getTextHintPoint = function (ctx, txt, x, y, coord) {
+  let xVal, yVal;
+  let r = ctx.measureText(txt);
+  let fontHeight = r.fontBoundingBoxAscent + r.fontBoundingBoxDescent;
+  
+  if (x + r.width + Drawer.POINT_TEXT_INDENT >= coord.x2) {
+    xVal = x - Drawer.POINT_TEXT_INDENT - r.width;
+  } else {
+    xVal = x + Drawer.POINT_TEXT_INDENT;
+  }
+  
+  if (y + fontHeight + Drawer.POINT_TEXT_INDENT >= coord.y2) {
+    yVal = y - Drawer.POINT_TEXT_INDENT - fontHeight;
+  } else {
+    yVal = y + Drawer.POINT_TEXT_INDENT;
+  }
+  
+  return {x: xVal, y: yVal}
+};
+
+
+Drawer.prototype.drawCursor = function () {
+  let ctx = this.context;
+  let graph = this.graphCoord;
+  let cur = this.curPoint;
+  let axis = this.axisCoord;
+  let xa1 = graph.pointXToCoord(cur.x, axis);
+  let ya1 = graph.pointYToCoord(cur.y, axis);
+  
+  // cursor in graph rect
+  if (graph.containPoint(cur.x, cur.y)) {
+    // draw cursor cross
+    ctx.beginPath();
+    ctx.strokeStyle = Drawer.CLR_CURSOR_CROSS;
+    ctx.moveTo(cur.x, graph.y1);
+    ctx.lineTo(cur.x, graph.y2);
+    ctx.moveTo(graph.x1, cur.y);
+    ctx.lineTo(graph.x2, cur.y);
+    ctx.stroke();
+    
+    // draw text for cursor cross
+    ctx.fillStyle = Drawer.CLR_CURSOR_TEXT;
+    ctx.textBaseline = 'top';
+    ctx.textAlign = 'start';
+    let txt = this.formatPointStr(xa1, ya1);
+    let pt = this.getTextHintPoint(ctx, txt, cur.x, cur.y, graph);
+    ctx.fillText(txt, pt.x, pt.y);
+    
+    // calc Y-value for cursor
+    let evalFunc = new Function('x', 'return ' + this.formula);
+    let x = xa1;
+    let y;
+    let error = false;
+    try {
+      y = evalFunc(x);
+    } catch (e) {
+      error = true;
+    }
+    
+    if (!error) {
+      let yc = axis.pointYToCoord(y, graph); // Y-axis => Y-Canvas
+      
+      // draw Y-cursor cross
+      ctx.beginPath();
+      ctx.strokeStyle = Drawer.CLR_CURSOR_Y;
+      if (graph.containPoint(cur.x, yc)) {
+        ctx.moveTo(graph.x1, yc);
+        ctx.lineTo(graph.x2, yc);
+        ctx.arc(cur.x, yc, Drawer.CURSOR_RAD, 0, 2 * Math.PI);
+        
+        // draw text for Y-cursor cross
+        ctx.fillStyle = Drawer.CLR_CURSOR_Y_TEXT;
+        let txt = this.formatPointStr(xa1, y);
+        let pt = this.getTextHintPoint(ctx, txt, cur.x, yc, graph);
+        ctx.fillText(txt, pt.x, pt.y);
+      }
+      ctx.stroke();
+    }
+  }
+};
+
 Drawer.prototype.drawSelection = function () {
   let ctx = this.context;
   let sel = this.selCoord;
-  let cnv = this.canvasCoord;
-  
-  this.paste(cnv.x1, cnv.y1);
   
   let inv = !(sel.isInverterX && sel.isInverterY);
   let validSel = this.selToValidSel();
   let selAxis = this.selToAxis();
   
   // draw rect
-  ctx.fillStyle = inv ? 'rgba(100,100,100,0.3)' : 'rgba(200,100,100,0.3)';
+  ctx.fillStyle = inv ? Drawer.CLR_SEL_RV_BG : Drawer.CLR_SEL_FW_BG;
   ctx.fillRect(validSel.x1, validSel.y1, validSel.width, validSel.height);
-  ctx.strokeStyle = inv ? 'rgba(100,100,100,0.6)' : 'rgba(200,100,100,0.6)';
+  ctx.strokeStyle = inv ? Drawer.CLR_SEL_RV : Drawer.CLR_SEL_FW;
   ctx.strokeRect(validSel.x1, validSel.y1, validSel.width, validSel.height);
-  // draw text coordinates x1/y1
-  ctx.fillStyle = inv ? 'rgba(100,100,100,1)' : 'rgba(200,100,100,1)';
-  ctx.textBaseline = 'top';
-  ctx.textAlign = 'end';
-  let txt = '(' + selAxis.x1.toFixed(1) + ', ' + selAxis.y1.toFixed(1) + ')';
-  ctx.fillText(txt, validSel.x1 - 10, validSel.y1 - 10);
-  // draw text coordinates x2/y2
-  txt = '(' + selAxis.x2.toFixed(1) + ', ' + selAxis.y2.toFixed(1) + ')';
+  
+  
+  // select style for text 
+  ctx.fillStyle = inv ? Drawer.CLR_SEL_RV_TEXT : Drawer.CLR_SEL_FW_TEXT;
   ctx.textBaseline = 'top';
   ctx.textAlign = 'start';
-  ctx.fillText(txt, validSel.x2 + 10, validSel.y2 + 10);
+  
+  // draw text coordinates x1/y1
+  let txt = this.formatPointStr(selAxis.x1, selAxis.y1);
+  let pt = this.getTextHintPoint(ctx, txt, validSel.x1, validSel.y1, this.graphCoord);
+  ctx.fillText(txt, pt.x, pt.y);
+  
+  // draw text coordinates x2/y2
+  txt = this.formatPointStr(selAxis.x2, selAxis.y2);
+  pt = this.getTextHintPoint(ctx, txt, validSel.x2, validSel.y2, this.graphCoord);
+  ctx.fillText(txt, pt.x, pt.y);
 };
 
 Drawer.prototype.clearSelection = function () {
@@ -320,33 +429,33 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
   let axis = this.axisCoord;
   
   ctx.beginPath();
-  ctx.strokeStyle = "#555";
+  ctx.strokeStyle = Drawer.CLR_SERIF;
   
   if (drawSerif) {
     let gridLen = graph.width / this.gridCount;
-    for (let i = gridLen; i < graph.width; i += gridLen) {
-      ctx.moveTo(graph.x1 + i, graph.y2 + this._SERIF_SIZE);
-      ctx.lineTo(graph.x1 + i, graph.y2 - this._SERIF_SIZE);
+    for (let i = gridLen; i < (graph.width - 1); i += gridLen) {
+      ctx.moveTo(graph.x1 + i, graph.y2 + Drawer.SERIF_SIZE);
+      ctx.lineTo(graph.x1 + i, graph.y2 - Drawer.SERIF_SIZE);
     }
-    
+  
     gridLen = graph.height / this.gridCount;
-    for (let i = gridLen; i < graph.height; i += gridLen) {
-      ctx.moveTo(graph.x1 - this._SERIF_SIZE, graph.y1 + i);
-      ctx.lineTo(graph.x1 + this._SERIF_SIZE, graph.y1 + i);
+    for (let i = gridLen; i < (graph.height - 1); i += gridLen) {
+      ctx.moveTo(graph.x1 - Drawer.SERIF_SIZE, graph.y1 + i);
+      ctx.lineTo(graph.x1 + Drawer.SERIF_SIZE, graph.y1 + i);
     }
     ctx.stroke();
   }
   
   if (drawText) {
     ctx.beginPath();
-    ctx.fillStyle = '#44A';
+    ctx.fillStyle = Drawer.CLR_SERIF_TEXT;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
-    
-    gridLen = graph.width / this.gridCount;
+  
+    let gridLen = graph.width / this.gridCount;
     for (let i = 0; i < graph.width; i += gridLen) {
       let txt = graph.pointXToCoord(graph.x1 + i, axis).toFixed(1);
-      ctx.fillText(txt, graph.x1 + i, graph.y2 + this._SERIF_SIZE, gridLen * 0.75);
+      ctx.fillText(txt, graph.x1 + i, graph.y2 + Drawer.SERIF_SIZE, gridLen * 0.75);
     }
     
     ctx.textBaseline = '';
@@ -355,30 +464,29 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
     gridLen = graph.height / this.gridCount;
     for (let i = 0; i < graph.height; i += gridLen) {
       let txt = graph.pointYToCoord(graph.y2 - i, axis).toFixed(1);
-      ctx.fillText(txt, graph.x1 - this._SERIF_SIZE, graph.y2 - i - gridLen / 3, CANVAS_PADDING);
+      ctx.fillText(txt, graph.x1 - Drawer.SERIF_SIZE, graph.y2 - i - gridLen / 3, Drawer.CANVAS_PADDING);
     }
   }
 };
 
 Drawer.prototype._drawAxis = function () {
-  
   let graph = this.graphCoord;
   let ctx = this.context;
   
   ctx.beginPath();
-  ctx.strokeStyle = "#555";
+  ctx.strokeStyle = Drawer.CLR_AXIS;
   // Y axis
   ctx.moveTo(graph.x1, graph.y2);
   ctx.lineTo(graph.x1, graph.y1);
-  ctx.lineTo(graph.x1 - this._ARROW_SIZE, graph.y1 + this._ARROW_SIZE);
+  ctx.lineTo(graph.x1 - Drawer.ARROW_SIZE, graph.y1 + Drawer.ARROW_SIZE);
   ctx.moveTo(graph.x1, graph.y1);
-  ctx.lineTo(graph.x1 + this._ARROW_SIZE, graph.y1 + this._ARROW_SIZE);
+  ctx.lineTo(graph.x1 + Drawer.ARROW_SIZE, graph.y1 + Drawer.ARROW_SIZE);
   // X axis
   ctx.moveTo(graph.x1, graph.y2);
   ctx.lineTo(graph.x2, graph.y2);
-  ctx.lineTo(graph.x2 - this._ARROW_SIZE, graph.y2 - this._ARROW_SIZE);
+  ctx.lineTo(graph.x2 - Drawer.ARROW_SIZE, graph.y2 - Drawer.ARROW_SIZE);
   ctx.moveTo(graph.x2, graph.y2);
-  ctx.lineTo(graph.x2 - this._ARROW_SIZE, graph.y2 + this._ARROW_SIZE);
+  ctx.lineTo(graph.x2 - Drawer.ARROW_SIZE, graph.y2 + Drawer.ARROW_SIZE);
   
   ctx.stroke();
   ctx.moveTo(graph.x1, graph.y2);
@@ -393,11 +501,11 @@ Drawer.prototype._drawGrid = function () {
   
   ctx.beginPath();
   
-  ctx.fillStyle = "#EEE";
+  ctx.fillStyle = Drawer.CLR_GRAPH_BG;
   ctx.fillRect(graph.x1, graph.y1, graph.width, graph.height);
   
   if (this.gridCount > 0) {
-    ctx.strokeStyle = "#BBB";
+    ctx.strokeStyle = Drawer.CLR_GRID;
     
     // vertical grid lines
     let gridLen = graph.width / this.gridCount;
@@ -422,7 +530,7 @@ Drawer.prototype._drawGrid = function () {
   
   // draw ZERO cross
   ctx.beginPath();
-  ctx.strokeStyle = "#444";
+  ctx.strokeStyle = Drawer.CLR_ZERO_CROSS;
   
   if (graph.containPoint(cnvX, graph.y1)) {
     ctx.moveTo(cnvX, graph.y1);
@@ -446,7 +554,7 @@ Drawer.prototype.drawGraph = function () {
   
   let dx = this.quality * axis.width / graph.width;
   
-  ctx.strokeStyle = "#F40";
+  ctx.strokeStyle = Drawer.CLR_FORMULA;
   let first = true;
   ctx.beginPath();
   
