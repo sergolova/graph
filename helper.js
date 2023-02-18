@@ -1,3 +1,5 @@
+'use strict'
+
 function setCookie(name, value, days) {
   let expires = "";
   if (days) {

@@ -1,8 +1,8 @@
 const COOKIE_LIFE = 7;
 const CANVAS_PADDING = 30;
 
-const CLR_VALID = "#FFF";          // input valid value color
-const CLR_ERROR = "#db303a";       // input invalid value color
+const CLR_VALID = "#d9d7d7";          // input valid value color
+const CLR_ERROR = "#be7074";       // input invalid value color
 const ID_CANVAS_WIDTH = '#cnv-width';
 const ID_CANVAS_HEIGHT = '#cnv-height';
 const ID_CANVAS_SIZE = '#lbl-cnv-size';
@@ -75,9 +75,8 @@ function onResizeCanvas() {
   lbl.innerText = `${w}\u00D7${h}`;
   cnv.setAttribute("width", w);
   cnv.setAttribute("height", h);
-  body.style.backgroundPositionX = Math.trunc(rect.x + w) + 'px';
-  body.style.backgroundPositionY = Math.trunc(rect.y + h) + 'px';
-  
+  body.style.backgroundPositionX = Math.trunc(rect.x + w + window.scrollX) + 'px';
+  body.style.backgroundPositionY = Math.trunc(rect.y + h + window.scrollY) + 'px';
   
   drawer.redrawTimeout(drawer, 0);
 }
@@ -105,16 +104,16 @@ function onInput() {
     
     drawer.formula = functions.correctFormula(inpFormula.value);
     try {
-      { // экранировка eval'a
+      {
         let x = 0;
-        let y = eval(drawer.formula);
+        let y = new Function('x', drawer.formula);
       }
       inpFormula.style.background = CLR_VALID;
       lblFormulaValid.setAttribute('hidden', '');
     } catch (e) {
       lblFormulaValid.innerText = e.message;
       lblFormulaValid.removeAttribute('hidden');
-      lblFormulaValid.style.color = 'red';
+      lblFormulaValid.style.color = 'maroon';
       inpFormula.style.background = CLR_ERROR;
       drawer.formula = null;
     }

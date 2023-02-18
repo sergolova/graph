@@ -1,3 +1,5 @@
+''
+
 // set static fields
 Drawer.DEFAULT_GRID = 10;
 Drawer.DEFAULT_ZOOM_STEP = 20;
@@ -84,11 +86,6 @@ Drawer.prototype.onCanvasMouseDown = function () {
 Drawer.prototype.onCanvasContextMenu = function () {
   this.clearSelection();
   this.redraw();
-};
-
-Drawer.prototype.onCanvasResize = function () {
-  console.log('!!!!');
-  onResizeCanvas();
 };
 
 Drawer.prototype.onCanvasMouseMove = function () {
@@ -364,6 +361,7 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
 };
 
 Drawer.prototype._drawAxis = function () {
+  
   let graph = this.graphCoord;
   let ctx = this.context;
   
@@ -390,6 +388,8 @@ Drawer.prototype._drawGrid = function () {
   let graph = this.graphCoord;
   let axis = this.axisCoord;
   let ctx = this.context;
+  let cnvX = axis.pointXToCoord(0, graph);
+  let cnvY = axis.pointYToCoord(0, graph);
   
   ctx.beginPath();
   
@@ -420,10 +420,9 @@ Drawer.prototype._drawGrid = function () {
   
   ctx.stroke();
   
+  // draw ZERO cross
   ctx.beginPath();
   ctx.strokeStyle = "#444";
-  let cnvX = axis.pointXToCoord(0, graph);
-  let cnvY = axis.pointYToCoord(0, graph);
   
   if (graph.containPoint(cnvX, graph.y1)) {
     ctx.moveTo(cnvX, graph.y1);
