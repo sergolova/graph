@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<script type="text/javascript"
+        src="https://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js?ver=1.3.2"></script>
+<script type="text/javascript" src="helper.js"></script>
+<script type="text/javascript" src="plot.js"></script>
+<script type="text/javascript" src="graph.js"></script>
+<script type="text/javascript" src="drawer.js"></script>
+
+<head>
+	<meta charset="UTF-8">
+	<!--	<link href="normalize.css" rel="stylesheet">-->
+	<link href="graph.css" rel="stylesheet">
+	<title>Graph</title>
+</head>
+
+<body onload="loadPage()">
+<div class="head">
+	Построение графиков онлайн
+</div>
+
+<div class="debug" id="dbg">
+	no errors
+</div>
+
+<div class="container clearfix">
+	<div class="settings">
+		<span class="param-name">Начало оси Х</span>
+		<input type="text" id="axis-X-start" class="axis-input" title="Начало оси Х" oninput="onInput()" value="-10">
+		<span class="param-name">Конец оси Х</span>
+		<input type="text" id="axis-X-end" class="axis-input" title="Конец оси Х" oninput="onInput()" value="+10">
+		<br><br>
+
+		<span class="param-name">Начало оси Y</span>
+		<input type="text" id="axis-Y-start" class="axis-input" title="Начало оси Y" oninput="onInput()" value="-10">
+		<span class="param-name">Конец оси Y</span>
+		<input type="text" id="axis-Y-end" class="axis-input" title="Конец оси Y" oninput="onInput()" value="+10">
+		<br><br>
+
+		<span class="param-name">Частота сетки </span>
+		<input type="range" id="grid-size" class="range-input" title="Ширина" min="0" max="30" step="5" value="10"
+		       oninput="onInput()">
+		<span id="lbl-grid-size" class="lbl-value">10</span>
+		<br><br>
+
+		<span class="param-name">Формула</span>
+		<input type="text" id="formula" class="formula-input" title="Сюда вводи свой график" value="sin(x)"
+		       oninput="onInput()">
+
+		<span class="param-name" hidden>Шаг dx</span>
+		<input type="text" id="step" class="axis-input" title="Шаг dx" value="0.1" oninput="onInput()" hidden>
+		<br>
+		<span class="formula-valid" hidden>OK</span>
+	</div>
+
+	<div id="table-scroll">
+		<table class="help">
+			<!-- класс help-line будет клонироваться -->
+			<tr class="help-line" hidden>
+				<td class="help-func"></td>
+				<td class="help-descr"></td>
+			</tr>
+		</table>
+	</div>
+</div>
+
+<div  id="cnv-div" onresize="onInputResize()">
+	<span id="lbl-cnv-size" class="lbl-value">100 x 100</span>
+	<canvas id="cnv">
+	</canvas>
+</div>
+</body>
+</html>
