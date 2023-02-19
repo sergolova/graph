@@ -65,11 +65,7 @@ function onResizeCanvas() {
   let w = parseInt(style.getPropertyValue("width"));
   const dy = 12;
   let rect = div.getBoundingClientRect();
-//  let w = Math.trunc(rect.width);
-//  let h = Math.trunc(rect.height);
   drawer.canvasCoord.set(0, 0, w, h - dy);
-  
-  //console.log(w, h);
   
   // область графика
   drawer.graphCoord.set(
@@ -236,6 +232,3 @@ function debug(msg) {
   lbl[0].innerText = msg;
   console.log(msg);
 }
-
-
-

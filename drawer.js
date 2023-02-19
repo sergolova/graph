@@ -38,6 +38,7 @@ function Drawer(canvasID) {
   this.canvasCoord = new Coord(0, 0, 1000, 1000); // Размеры всей канвы для рисования
   this.canvasData = null;
   this.formula = '';
+  this.drawCur = true;
   this.gridCount = Drawer.DEF_GRID_COUNT;
   this.zoomStep = Drawer.DEF_ZOOM_STEP;
   this.quality = 1;  //
@@ -49,6 +50,7 @@ function Drawer(canvasID) {
   
   // private variables for zoom
   this._zoom = {
+    begin: false,
     timer: null,
     deltaX1: 0,
     deltaX2: 0,
@@ -56,6 +58,13 @@ function Drawer(canvasID) {
     deltaY2: 0,
     iterator: 0
   };
+  
+  this._drag = {
+    begin: false,       // drag in progress
+    coord: new Coord(), // 1 - start drag point, 2 - current drag point
+    axis: new Coord(),  // axis at the moment of start of dragging
+    timer: null
+  }
   
   // call when constructing prototype!
   this.setEvents(canvasID);
@@ -70,6 +79,7 @@ Drawer.prototype.setEvents = function (canvasID) {
     cnv.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
     cnv.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
     cnv.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
+    cnv.addEventListener('dblclick', this.onCanvasDoubleClick.bind(this));
     cnv.addEventListener('contextmenu', this.onCanvasContextMenu.bind(this));
     
     return true;
@@ -85,31 +95,32 @@ Drawer.prototype.setEvents = function (canvasID) {
 
 Drawer.prototype.onCanvasMouseDown = function () {
   let event = window.event;
-  this._zoom.leftBtnDown = (event.button === 0);
+  this._zoom.begin = (event.button === 0) && event.ctrlKey;
+  this._drag.begin = (event.button === 0) && !event.ctrlKey;
   
-  if (this._zoom.leftBtnDown) {
+  if (this._zoom.begin) {
     this.selCoord.set1(event.offsetX, event.offsetY);
-    // copy canvas image
-    if (this._canvasData) {
-      this.paste(this.canvasCoord.x1, this.canvasCoord.y1);
-    }
+  } else if (this._drag.begin) {
+    // save mouse start position
+    this._drag.coord.set(event.offsetX, event.offsetY, event.offsetX, event.offsetY);
+    // save axis at the moment of start of dragging
+    this._drag.axis.copyFrom(this.axisCoord);
+    this.onDragStart();
   }
 };
 
-Drawer.prototype.onCanvasContextMenu = function () {
-  this.clearSelection();
-  this.redraw();
-};
-
 Drawer.prototype.onCanvasMouseMove = function () {
-  if (this._zoom.leftBtnDown) {
+  if (this._zoom.begin) {
     this._zoom.iterator = this.zoomStep;
     clearInterval(this._zoom.timer);
     
     this.selCoord.set2(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawSelection();
-  } else {
+  } else if (this._drag.begin) {
+    this._drag.coord.set2(event.offsetX, event.offsetY);
+    // this.onDrag(); - updating by timer!!! this._drag.timer
+  } else if (this.drawCur) {
     this.curPoint = new Point(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawCursor();
@@ -119,17 +130,29 @@ Drawer.prototype.onCanvasMouseMove = function () {
 Drawer.prototype.onCanvasMouseUp = function () {
   let event = window.event;
   
-  if (this._zoom.leftBtnDown) {
+  if (this._zoom.begin) {
     this.selCoord.set2(event.offsetX, event.offsetY);
-    this._zoom.leftBtnDown = false;
+    this._zoom.begin = false;
     
     this.onZoomStart();
+  } else if (this._drag.begin) {
+    this._drag.begin = false;
+    this.onDragEnd();
   }
   this._canvasData = null;
 };
 
 Drawer.prototype.onCanvasMouseLeave = function () {
   this.onCanvasMouseUp();
+};
+
+Drawer.prototype.onCanvasContextMenu = function () {
+  this.clearSelection();
+  this.redraw();
+};
+
+Drawer.prototype.onCanvasDoubleClick = function () {
+  onInput(); // reload, undo zoom
 };
 
 Drawer.prototype.onZoomStart = function () {
@@ -218,10 +241,23 @@ Drawer.prototype._clearBorder = function () {
   ctx.clearRect(graph.x2, cnv.y1, cnv.x2 - graph.x2, cnv.height);
 };
 
-// main draw function
-Drawer.prototype.redraw = function () {
+Drawer.prototype.checkCriticalVariables = function () {
   if (!this.context) {
     return this.callOnError('Context is null');
+  } else if (!this.axisCoord.isValid()) {
+    return this.callOnError('Invalid axisCoord');
+  } else if (!this.graphCoord.isValid()) {
+    return this.callOnError('Invalid graphCoord');
+  } else if (!this.canvasCoord.isValid()) {
+    return this.callOnError('Invalid canvasCoord');
+  }
+  return true;
+}
+
+// main draw function
+Drawer.prototype.redraw = function () {
+  if (!this.checkCriticalVariables()) {
+    return;
   }
   
   try {
@@ -251,7 +287,11 @@ Drawer.prototype.copy = function (coord) {
 };
 
 Drawer.prototype.paste = function (x, y) {
-  this.context.putImageData(this.canvasData, x, y);
+  if (this.canvasData) {
+    this.context.putImageData(this.canvasData, x, y);
+  } else {
+    console.log('Drawer.prototype.paste: canvasData=' + this.canvasData);
+  }
 };
 
 // redraw with delay
@@ -322,8 +362,40 @@ Drawer.prototype.getTextHintPoint = function (ctx, txt, x, y, coord) {
   return {x: xVal, y: yVal}
 };
 
+Drawer.prototype.onDragStart = function () {
+  this._drag.timer = setInterval(this.onDrag.bind(this), 50);
+}
+
+Drawer.prototype.onDragEnd = function () {
+  clearInterval(this._drag.timer);
+  this._drag.timer = 0;
+}
+
+Drawer.prototype.onDrag = function () {
+  let graph = this.graphCoord;
+  let drag = this._drag.coord;
+  let axis = this.axisCoord;
+  
+  let axisDrag = new Coord(
+    graph.pointXToCoord(drag.x1, axis),
+    graph.pointYToCoord(drag.y1, axis),
+    graph.pointXToCoord(drag.x2, axis),
+    graph.pointYToCoord(drag.y2, axis));
+  
+  axis.set(
+    this._drag.axis.x1 - axisDrag.deltaX,
+    this._drag.axis.y1 - axisDrag.deltaY,
+    this._drag.axis.x2 - axisDrag.deltaX,
+    this._drag.axis.y2 - axisDrag.deltaY);
+  
+  this.redraw();
+};
 
 Drawer.prototype.drawCursor = function () {
+  if (!this.checkCriticalVariables()) {
+    return;
+  }
+  
   let ctx = this.context;
   let graph = this.graphCoord;
   let cur = this.curPoint;
@@ -386,7 +458,6 @@ Drawer.prototype.drawCursor = function () {
 Drawer.prototype.drawSelection = function () {
   let ctx = this.context;
   let sel = this.selCoord;
-  
   let inv = !(sel.isInverterX && sel.isInverterY);
   let validSel = this.selToValidSel();
   let selAxis = this.selToAxis();
@@ -396,7 +467,6 @@ Drawer.prototype.drawSelection = function () {
   ctx.fillRect(validSel.x1, validSel.y1, validSel.width, validSel.height);
   ctx.strokeStyle = inv ? Drawer.CLR_SEL_RV : Drawer.CLR_SEL_FW;
   ctx.strokeRect(validSel.x1, validSel.y1, validSel.width, validSel.height);
-  
   
   // select style for text 
   ctx.fillStyle = inv ? Drawer.CLR_SEL_RV_TEXT : Drawer.CLR_SEL_FW_TEXT;
@@ -659,4 +729,3 @@ Functions.prototype.correctFormula = function (formula) {
   }
   return formula;
 };
-

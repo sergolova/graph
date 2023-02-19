@@ -2,10 +2,18 @@
 // Coord - coordinates constructor
 // ---------------------------------------------------------------------------------------------------------------------
 
+//function CoordFrom
+
 function Coord(x1 = 0, y1 = 0, x2 = 0, y2 = 0) {
   this.set(x1, y1, x2, y2);
   
   Object.defineProperties(this, {
+    'deltaX': {
+      get: () => this.x2 - this.x1
+    },
+    'deltaY': {
+      get: () => this.y2 - this.y1
+    },
     'width': {
       get: () => Math.abs(this.x2 - this.x1)
     },
@@ -21,9 +29,24 @@ function Coord(x1 = 0, y1 = 0, x2 = 0, y2 = 0) {
   });
 }
 
+Coord.prototype.isValid = function () {
+  return Number.isFinite(this.x1) &&
+    Number.isFinite(this.y1) &&
+    Number.isFinite(this.x2) &&
+    Number.isFinite(this.y2);
+};
+
 Coord.prototype.copyFrom = function (coord) {
   this.set(coord.x1, coord.y1, coord.x2, coord.y2);
 };
+
+Coord.prototype.move = function (dx, dy) {
+  this.y1 += dy;
+  this.y2 += dy;
+  this.x1 += dx;
+  this.x2 += dx;
+};
+
 
 Coord.prototype.set1 = function (x1, y1) {
   this.x1 = x1;
