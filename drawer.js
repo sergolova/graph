@@ -6,10 +6,19 @@ Drawer.ARROW_SIZE = 5;  // axis arrow size
 Drawer.SERIF_SIZE = 4;  // axis serif size
 Drawer.CURSOR_RAD = 2;
 Drawer.POINT_TEXT_INDENT = 10;
+Drawer.TRANSPARENT_BG = false;
+
+Drawer.CUR_DRAG = 'grab';
+Drawer.CUR_NORMAL = 'crosshair';
+Drawer.CUR_ZOOM = 'zoom-in';
+
+Drawer.HIGH_QUALITY = 1;
+Drawer.LOW_QUALITY = 3;
 
 // colors
 Drawer.CLR_CANVAS_BG = 1;
-Drawer.CLR_GRAPH_BG = "#EEE";
+Drawer.CLR_GRAPH_BG = "#e0e0e0";
+Drawer.CLR_GRID_BG = "#EEE";
 Drawer.CLR_GRID = "#BBB";
 Drawer.CLR_AXIS = "#555";
 Drawer.CLR_ZERO_CROSS = "#444";
@@ -29,16 +38,17 @@ Drawer.CLR_SEL_RV_TEXT = 'rgba(0,66,87,1)';
 
 
 function Drawer(canvasID) {
-  // declare properties
+  // declare properties 
+  this.canvasID = canvasID;
   this.context = null;
-  this.selCoord = new Coord();          // текущая область выделения
+  
   this.curPoint = new Point();          // cursor point. Relative to the upper left corner of the canvas
   this.axisCoord = new Coord(-10, -10, 10, 10);   // Вычислительная система координат
   this.graphCoord = new Coord(40, 400, 600, 40);  // Размеры канвы графика
   this.canvasCoord = new Coord(0, 0, 1000, 1000); // Размеры всей канвы для рисования
   this.canvasData = null;
   this.formula = '';
-  this.drawCur = true;
+  this.showCursors = true;
   this.gridCount = Drawer.DEF_GRID_COUNT;
   this.zoomStep = Drawer.DEF_ZOOM_STEP;
   this.quality = 1;  //
@@ -46,7 +56,12 @@ function Drawer(canvasID) {
   
   // declare private variables
   this._timer = null; // redraw timer
-  this._canvasData = null;
+  this._cursorSave = null;
+  
+  this._sel = {
+    begin: false,
+    coord: null          // текущая область выделения
+  };
   
   // private variables for zoom
   this._zoom = {
@@ -67,11 +82,11 @@ function Drawer(canvasID) {
   }
   
   // call when constructing prototype!
-  this.setEvents(canvasID);
+  this.setEvents();
 }
 
-Drawer.prototype.setEvents = function (canvasID) {
-  let cnv = $(canvasID)[0];
+Drawer.prototype.setEvents = function () {
+  let cnv = $(this.canvasID)[0];
   if (cnv.getContext) {
     this.context = cnv.getContext('2d', {willReadFrequently: true});
     
@@ -81,7 +96,6 @@ Drawer.prototype.setEvents = function (canvasID) {
     cnv.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
     cnv.addEventListener('dblclick', this.onCanvasDoubleClick.bind(this));
     cnv.addEventListener('contextmenu', this.onCanvasContextMenu.bind(this));
-    
     return true;
   } else {
     cnv.removeEventListener('mousedown');
@@ -95,12 +109,11 @@ Drawer.prototype.setEvents = function (canvasID) {
 
 Drawer.prototype.onCanvasMouseDown = function () {
   let event = window.event;
-  this._zoom.begin = (event.button === 0) && event.ctrlKey;
-  this._drag.begin = (event.button === 0) && !event.ctrlKey;
   
-  if (this._zoom.begin) {
-    this.selCoord.set1(event.offsetX, event.offsetY);
-  } else if (this._drag.begin) {
+  if ((event.button === 0) && event.ctrlKey) {
+    this._sel.coord = new Coord(event.offsetX, event.offsetY, 0, 0);
+    this.onSelStart();
+  } else if ((event.button === 0) && !event.ctrlKey) {
     // save mouse start position
     this._drag.coord.set(event.offsetX, event.offsetY, event.offsetX, event.offsetY);
     // save axis at the moment of start of dragging
@@ -110,17 +123,17 @@ Drawer.prototype.onCanvasMouseDown = function () {
 };
 
 Drawer.prototype.onCanvasMouseMove = function () {
-  if (this._zoom.begin) {
+  if (this._sel.begin) {
     this._zoom.iterator = this.zoomStep;
     clearInterval(this._zoom.timer);
     
-    this.selCoord.set2(event.offsetX, event.offsetY);
+    this._sel.coord.set2(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawSelection();
   } else if (this._drag.begin) {
     this._drag.coord.set2(event.offsetX, event.offsetY);
     // this.onDrag(); - updating by timer!!! this._drag.timer
-  } else if (this.drawCur) {
+  } else if (this.showCursors) {
     this.curPoint = new Point(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawCursor();
@@ -130,13 +143,12 @@ Drawer.prototype.onCanvasMouseMove = function () {
 Drawer.prototype.onCanvasMouseUp = function () {
   let event = window.event;
   
-  if (this._zoom.begin) {
-    this.selCoord.set2(event.offsetX, event.offsetY);
-    this._zoom.begin = false;
-    
+  if (this._sel.begin) {
+    this._sel.coord.set2(event.offsetX, event.offsetY);
+    this.onSelEnd();
     this.onZoomStart();
   } else if (this._drag.begin) {
-    this._drag.begin = false;
+    
     this.onDragEnd();
   }
   this._canvasData = null;
@@ -146,9 +158,21 @@ Drawer.prototype.onCanvasMouseLeave = function () {
   this.onCanvasMouseUp();
 };
 
+Drawer.prototype.onSelStart = function () {
+  this._sel.begin = true;
+  this._cursorSave = $(this.canvasID)[0].style.cursor;
+  $(this.canvasID)[0].style.cursor = Drawer.CUR_ZOOM;
+}
+
+Drawer.prototype.onSelEnd = function () {
+  this._sel.begin = false;
+  $(this.canvasID)[0].style.cursor = this._cursorSave;
+}
+
 Drawer.prototype.onCanvasContextMenu = function () {
   this.clearSelection();
-  this.redraw();
+  // this.redraw();
+  this.onCanvasMouseUp();
 };
 
 Drawer.prototype.onCanvasDoubleClick = function () {
@@ -157,7 +181,7 @@ Drawer.prototype.onCanvasDoubleClick = function () {
 
 Drawer.prototype.onZoomStart = function () {
   // too small selection rect
-  let sel = this.selCoord;
+  let sel = this._sel.coord;
   let axis = this.axisCoord;
   let canvas = this.canvasCoord;
   
@@ -177,8 +201,6 @@ Drawer.prototype.onZoomStart = function () {
     // получаем разницу между начальной и конечной координатой и делим её на this.zoomStep.
     // для передачи дельт между функциями используем onZoom как объект
     
-    sel.dbg('selection');
-    axis.dbg('axis now');
     let zoomCoord = this.selToAxis();
     zoomCoord.normalize();
     zoomCoord.dbg('zoom');
@@ -186,23 +208,25 @@ Drawer.prototype.onZoomStart = function () {
     this._zoom.deltaX2 = Math.abs(axis.x2 - zoomCoord.x2) / this.zoomStep;
     this._zoom.deltaY1 = Math.abs(axis.y1 - zoomCoord.y1) / this.zoomStep;
     this._zoom.deltaY2 = Math.abs(axis.y2 - zoomCoord.y2) / this.zoomStep;
-    
+  
     debug('dx1=' + this._zoom.deltaX1.toFixed(1) +
       ' dy1=' + this._zoom.deltaY1.toFixed(1) +
       ' dx2=' + this._zoom.deltaX2.toFixed(1) +
       ' dy2=' + this._zoom.deltaY2.toFixed(1));
-    
+  
     this._zoom.iterator = 0; // strip
-    this.quality = 3; // decrease quality for speed
+    this.quality = Drawer.LOW_QUALITY; // decrease quality for speed
     clearTimeout(this._zoom.timer);
     // Запускаем таймер зума
+    this._zoom.begin = true;
     this._zoom.timer = setTimeout(this.onZoom.bind(this), 15);
   }
 };
 
 Drawer.prototype.onZoomEnd = function () {
-  this.quality = 1; // // возвращаем качество
+  this.quality = Drawer.HIGH_QUALITY; // // возвращаем качество
   this.redraw(); // redraw with normal dx
+  this._zoom.begin = false;
 };
 
 Drawer.prototype.onZoom = function () {
@@ -241,6 +265,22 @@ Drawer.prototype._clearBorder = function () {
   ctx.clearRect(graph.x2, cnv.y1, cnv.x2 - graph.x2, cnv.height);
 };
 
+Drawer.prototype._fillBorder = function () {
+  let ctx = this.context;
+  let cnv = this.canvasCoord;
+  let graph = this.graphCoord;
+  
+  ctx.beginPath();
+  ctx.fillStyle = Drawer.CLR_GRAPH_BG;
+  
+  ctx.fillRect(cnv.x1, cnv.y1, cnv.width, graph.y1 - cnv.y1);
+  ctx.fillRect(cnv.x1, graph.y2, cnv.width, cnv.y2 - graph.y2);
+  ctx.fillRect(cnv.x1, cnv.y1, graph.x1, cnv.height);
+  ctx.fillRect(graph.x2, cnv.y1, cnv.x2 - graph.x2, cnv.height);
+  
+  ctx.stroke();
+};
+
 Drawer.prototype.checkCriticalVariables = function () {
   if (!this.context) {
     return this.callOnError('Context is null');
@@ -261,10 +301,14 @@ Drawer.prototype.redraw = function () {
   }
   
   try {
-    this.clearCanvas();
+    //  this.clearCanvas(); // clear all
     this._drawGrid();
     this.drawGraph();
-    this._clearBorder();
+    if (Drawer.TRANSPARENT_BG) {
+      this._clearBorder();
+    } else {
+      this._fillBorder();
+    }
     this._drawAxis();
     this._drawSerifsAndText(true, true);
     this.copy();
@@ -301,7 +345,7 @@ Drawer.prototype.redrawTimeout = function (timeout) {
 };
 
 Drawer.prototype.selToValidSel = function () {
-  let sel = this.selCoord;
+  let sel = this._sel.coord;
   let graph = this.graphCoord;
   
   let validSel = new Coord();
@@ -363,12 +407,21 @@ Drawer.prototype.getTextHintPoint = function (ctx, txt, x, y, coord) {
 };
 
 Drawer.prototype.onDragStart = function () {
+  this._drag.begin = true;
   this._drag.timer = setInterval(this.onDrag.bind(this), 50);
+  this.quality = Drawer.LOW_QUALITY;
+  // save and set drag cursor
+  this._cursorSave = $(this.canvasID)[0].style.cursor;
+  $(this.canvasID)[0].style.cursor = Drawer.CUR_DRAG;
 }
 
 Drawer.prototype.onDragEnd = function () {
+  this._drag.begin = false;
   clearInterval(this._drag.timer);
   this._drag.timer = 0;
+  this.quality = Drawer.HIGH_QUALITY;
+  // restore cursor
+  $(this.canvasID)[0].style.cursor = this._cursorSave;
 }
 
 Drawer.prototype.onDrag = function () {
@@ -457,7 +510,7 @@ Drawer.prototype.drawCursor = function () {
 
 Drawer.prototype.drawSelection = function () {
   let ctx = this.context;
-  let sel = this.selCoord;
+  let sel = this._sel.coord;
   let inv = !(sel.isInverterX && sel.isInverterY);
   let validSel = this.selToValidSel();
   let selAxis = this.selToAxis();
@@ -487,6 +540,7 @@ Drawer.prototype.drawSelection = function () {
 Drawer.prototype.clearSelection = function () {
   let cnv = this.canvasCoord;
   this.paste(cnv.x1, cnv.y1);
+  this.onSelEnd();
 };
 
 Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
@@ -571,7 +625,7 @@ Drawer.prototype._drawGrid = function () {
   
   ctx.beginPath();
   
-  ctx.fillStyle = Drawer.CLR_GRAPH_BG;
+  ctx.fillStyle = Drawer.CLR_GRID_BG;
   ctx.fillRect(graph.x1, graph.y1, graph.width, graph.height);
   
   if (this.gridCount > 0) {

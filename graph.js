@@ -12,7 +12,7 @@ const ID_FORMULA = '#formula';
 const ID_FORMULA_VALID = '.formula-valid';
 const ID_STEP = '#step';
 const ID_CANVAS = '#cnv';
-const ID_RESIZE_ICON = '#resize-icon';
+const ID_SHOW_CURSORS = "#show-cursors";
 
 const ID_AXIS_X1 = '#axis-X-start';
 const ID_AXIS_X2 = '#axis-X-end';
@@ -50,6 +50,7 @@ function createHelp() {
   }
 }
 
+
 // Событие при изменении параметров канвы.
 // События от контролов разнесены на две функции из-за того, что при изменении размеров
 // канвы всё изображение стирается и получается мерцание. Зачем лишний раз мерцать?!
@@ -86,7 +87,7 @@ function onResizeCanvas() {
 }
 
 // Событие при изменении параметров графика
-function onInput() {
+function onInput(refresh) {
   try {
     let inpGrid = $(ID_GRID_SIZE)[0];
     let lblGrid = $(ID_GRID_LBL)[0];
@@ -97,6 +98,7 @@ function onInput() {
     let inpY1 = $(ID_AXIS_Y1)[0];
     let inpY2 = $(ID_AXIS_Y2)[0];
     let lblFormulaValid = $(ID_FORMULA_VALID)[0];
+    let cbxCursors = $(ID_SHOW_CURSORS)[0];
     let axis = drawer.axisCoord;
     
     drawer.gridCount = Math.abs(+inpGrid.value);
@@ -109,7 +111,7 @@ function onInput() {
     drawer.formula = functions.correctFormula(inpFormula.value);
     try {
       {
-        let x = 0;
+        let x;
         let y = new Function('x', drawer.formula);
       }
       inpFormula.style.background = CLR_VALID;
@@ -122,21 +124,25 @@ function onInput() {
       drawer.formula = null;
     }
     
-    drawer.axisCoord.x1 = +inpX1.value;
-    inpX1.style.background = isValid(axis.x1) ? CLR_VALID : CLR_ERROR;
-    axis.x1 = axis.x1 || 0;
+    if (refresh !== false) {
+      drawer.axisCoord.x1 = +inpX1.value;
+      inpX1.style.background = isValid(axis.x1) ? CLR_VALID : CLR_ERROR;
+      axis.x1 = axis.x1 || 0;
+      
+      axis.x2 = +inpX2.value;
+      inpX2.style.background = isValid(axis.x2) ? CLR_VALID : CLR_ERROR;
+      axis.x2 = axis.x2 || 0;
+      
+      axis.y1 = +inpY1.value;
+      inpY1.style.background = isValid(axis.y1) ? CLR_VALID : CLR_ERROR;
+      axis.y1 = axis.y1 || 0;
+      
+      axis.y2 = +inpY2.value;
+      inpY2.style.background = isValid(axis.y2) ? CLR_VALID : CLR_ERROR;
+      axis.y2 = axis.y2 || 0;
+    }
     
-    axis.x2 = +inpX2.value;
-    inpX2.style.background = isValid(axis.x2) ? CLR_VALID : CLR_ERROR;
-    axis.x2 = axis.x2 || 0;
-    
-    axis.y1 = +inpY1.value;
-    inpY1.style.background = isValid(axis.y1) ? CLR_VALID : CLR_ERROR;
-    axis.y1 = axis.y1 || 0;
-    
-    axis.y2 = +inpY2.value;
-    inpY2.style.background = isValid(axis.y2) ? CLR_VALID : CLR_ERROR;
-    axis.y2 = axis.y2 || 0;
+    drawer.showCursors = cbxCursors.checked;
     
     // сохраняем в куки
     setCookie(ID_GRID_SIZE, inpGrid.value, COOKIE_LIFE);
@@ -146,6 +152,7 @@ function onInput() {
     setCookie(ID_AXIS_X2, inpX2.value, COOKIE_LIFE);
     setCookie(ID_AXIS_Y1, inpY1.value, COOKIE_LIFE);
     setCookie(ID_AXIS_Y2, inpY2.value, COOKIE_LIFE);
+    setCookie(ID_SHOW_CURSORS, cbxCursors.checked.toString(), COOKIE_LIFE);
   } catch (e) {
     debug('ошибка ввода данных: ' + e.message);
   }
@@ -167,6 +174,7 @@ function loadCookies() {
     let inpX2 = $(ID_AXIS_X2)[0];
     let inpY1 = $(ID_AXIS_Y1)[0];
     let inpY2 = $(ID_AXIS_Y2)[0];
+    let cbxCursors = $(ID_SHOW_CURSORS)[0];
     
     /*		if (cookieExists(ID_CANVAS_WIDTH)) {
           inpW.value = getCookie(ID_CANVAS_WIDTH)
@@ -195,15 +203,19 @@ function loadCookies() {
     if (cookieExists(ID_AXIS_X2)) {
       inpX2.value = getCookie(ID_AXIS_X2);
     }
-    
+  
     if (cookieExists(ID_AXIS_Y1)) {
       inpY1.value = getCookie(ID_AXIS_Y1);
     }
-    
+  
     if (cookieExists(ID_AXIS_Y2)) {
       inpY2.value = getCookie(ID_AXIS_Y2);
     }
-    
+  
+    if (cookieExists(ID_SHOW_CURSORS)) {
+      cbxCursors.checked = getCookie(ID_SHOW_CURSORS) === 'true';
+    }
+  
   } catch (err) {
     debug('cannot paste cookies! ' + err.message);
   }
