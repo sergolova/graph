@@ -221,7 +221,6 @@ function loadCookies() {
   }
 }
 
-
 function loadPage() {
   functions = new Functions();
   createHelp();

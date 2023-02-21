@@ -1,12 +1,16 @@
 // set static fields
 Drawer.DEF_GRID_COUNT = 10;
-Drawer.DEF_ZOOM_STEP = 20;
+Drawer.DEF_ZOOM_STEP = 10;
+Drawer.ZOOM_TIMER_MS = 50;
 Drawer.CANVAS_PADDING = 30;
 Drawer.ARROW_SIZE = 5;  // axis arrow size
 Drawer.SERIF_SIZE = 4;  // axis serif size
 Drawer.CURSOR_RAD = 2;
 Drawer.POINT_TEXT_INDENT = 10;
 Drawer.TRANSPARENT_BG = false;
+Drawer.SERIF_TEXT_INDENT_X = 5;
+Drawer.SERIF_TEXT_INDENT_Y = 5;
+Drawer.WHEEL_PERCENT = 10;
 
 Drawer.CUR_DRAG = 'grab';
 Drawer.CUR_NORMAL = 'crosshair';
@@ -35,7 +39,6 @@ Drawer.CLR_SEL_FW_TEXT = 'rgba(200,100,100,1)';
 Drawer.CLR_SEL_RV = 'rgba(0,66,87,0.6)';
 Drawer.CLR_SEL_RV_BG = 'rgb(0,119,157,0.3)';
 Drawer.CLR_SEL_RV_TEXT = 'rgba(0,66,87,1)';
-
 
 function Drawer(canvasID) {
   // declare properties 
@@ -78,7 +81,6 @@ function Drawer(canvasID) {
     begin: false,       // drag in progress
     coord: new Coord(), // 1 - start drag point, 2 - current drag point
     axis: new Coord(),  // axis at the moment of start of dragging
-    timer: null
   }
   
   // call when constructing prototype!
@@ -89,7 +91,7 @@ Drawer.prototype.setEvents = function () {
   let cnv = $(this.canvasID)[0];
   if (cnv.getContext) {
     this.context = cnv.getContext('2d', {willReadFrequently: true});
-    
+    cnv.addEventListener('wheel', this.onMouseWheel.bind(this));
     cnv.addEventListener('mousedown', this.onCanvasMouseDown.bind(this));
     cnv.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
     cnv.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
@@ -103,6 +105,7 @@ Drawer.prototype.setEvents = function () {
     cnv.removeEventListener('mouseleave');
     cnv.removeEventListener('mouseup');
     cnv.removeEventListener('contextmenu');
+    cnv.removeEventListener('wheel');
     return false;
   }
 };
@@ -124,20 +127,18 @@ Drawer.prototype.onCanvasMouseDown = function () {
 
 Drawer.prototype.onCanvasMouseMove = function () {
   if (this._sel.begin) {
-    this._zoom.iterator = this.zoomStep;
-    clearInterval(this._zoom.timer);
-    
     this._sel.coord.set2(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawSelection();
   } else if (this._drag.begin) {
     this._drag.coord.set2(event.offsetX, event.offsetY);
-    // this.onDrag(); - updating by timer!!! this._drag.timer
+    this.onDrag();
   } else if (this.showCursors) {
     this.curPoint = new Point(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawCursor();
   }
+  console.log('onMouseMove')
 };
 
 Drawer.prototype.onCanvasMouseUp = function () {
@@ -177,6 +178,29 @@ Drawer.prototype.onCanvasContextMenu = function () {
 
 Drawer.prototype.onCanvasDoubleClick = function () {
   onInput(); // reload, undo zoom
+};
+
+Drawer.prototype.onMouseWheel = function () {
+  // zoom
+  let event = window.event;
+  let axis = this.axisCoord;
+  let all = !event.altKey && !event.shiftKey;
+  let sign = Math.sign(event.deltaY);
+  
+  let deltaX = (event.shiftKey || all) ?
+    (sign * axis.width * Drawer.WHEEL_PERCENT / 100 / 2) : 0;
+  let deltaY = (event.altKey || all) ?
+    (sign * axis.height * Drawer.WHEEL_PERCENT / 100 / 2) : 0;
+  
+  axis.x1 -= deltaX;
+  axis.y1 -= deltaY;
+  axis.x2 += deltaX;
+  axis.y2 += deltaY;
+  
+  this.onSelEnd();
+  this.redraw();
+  this.onCanvasMouseMove();
+  
 };
 
 Drawer.prototype.onZoomStart = function () {
@@ -219,7 +243,7 @@ Drawer.prototype.onZoomStart = function () {
     clearTimeout(this._zoom.timer);
     // Запускаем таймер зума
     this._zoom.begin = true;
-    this._zoom.timer = setTimeout(this.onZoom.bind(this), 15);
+    this._zoom.timer = setTimeout(this.onZoom.bind(this), Drawer.ZOOM_TIMER_MS);
   }
 };
 
@@ -408,7 +432,6 @@ Drawer.prototype.getTextHintPoint = function (ctx, txt, x, y, coord) {
 
 Drawer.prototype.onDragStart = function () {
   this._drag.begin = true;
-  this._drag.timer = setInterval(this.onDrag.bind(this), 50);
   this.quality = Drawer.LOW_QUALITY;
   // save and set drag cursor
   this._cursorSave = $(this.canvasID)[0].style.cursor;
@@ -417,9 +440,8 @@ Drawer.prototype.onDragStart = function () {
 
 Drawer.prototype.onDragEnd = function () {
   this._drag.begin = false;
-  clearInterval(this._drag.timer);
-  this._drag.timer = 0;
   this.quality = Drawer.HIGH_QUALITY;
+  this.redraw(); // need redraw after quality change
   // restore cursor
   $(this.canvasID)[0].style.cursor = this._cursorSave;
 }
@@ -441,7 +463,7 @@ Drawer.prototype.onDrag = function () {
     this._drag.axis.x2 - axisDrag.deltaX,
     this._drag.axis.y2 - axisDrag.deltaY);
   
-  this.redraw();
+  this.redraw()
 };
 
 Drawer.prototype.drawCursor = function () {
@@ -550,6 +572,7 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
   
   let ctx = this.context;
   let graph = this.graphCoord;
+  let cnv = this.canvasCoord;
   let axis = this.axisCoord;
   
   ctx.beginPath();
@@ -577,20 +600,35 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
     ctx.textAlign = 'center';
   
     let gridLen = graph.width / this.gridCount;
+    // let fontHeight = r.fontBoundingBoxAscent + r.fontBoundingBoxDescent;
+    let prevTextBorder = cnv.x1;
     for (let i = 0; i < graph.width; i += gridLen) {
       let txt = graph.pointXToCoord(graph.x1 + i, axis).toFixed(1);
-      ctx.fillText(txt, graph.x1 + i, graph.y2 + Drawer.SERIF_SIZE, gridLen * 0.75);
+      let r;
+      let x = graph.x1 + i;
+      if (x > prevTextBorder) { // draw if the marks do not intersect
+        r = ctx.measureText(txt);
+        ctx.fillText(txt, x, graph.y2 + Drawer.SERIF_SIZE);
+        prevTextBorder = x + r.width + Drawer.SERIF_TEXT_INDENT_X;
+      }
     }
-    
-    ctx.textBaseline = '';
+  
+    ctx.textBaseline = 'middle';
     ctx.textAlign = 'end';
-    
+  
+    prevTextBorder = cnv.y2;
     gridLen = graph.height / this.gridCount;
     for (let i = 0; i < graph.height; i += gridLen) {
       let txt = graph.pointYToCoord(graph.y2 - i, axis).toFixed(1);
-      ctx.fillText(txt, graph.x1 - Drawer.SERIF_SIZE, graph.y2 - i - gridLen / 3, Drawer.CANVAS_PADDING);
-    }
-  }
+      let r;
+      let y = graph.y2 - i;
+      if (y < prevTextBorder) { // draw if the marks do not intersect
+        r = ctx.measureText(txt);
+        ctx.fillText(txt, graph.x1 - Drawer.SERIF_SIZE, y, Drawer.CANVAS_PADDING);
+        prevTextBorder = y - (r.fontBoundingBoxAscent + r.fontBoundingBoxDescent) / 2 - Drawer.SERIF_TEXT_INDENT_Y;
+      }
+    }// for
+  } // draw text
 };
 
 Drawer.prototype._drawAxis = function () {
@@ -715,7 +753,6 @@ Drawer.prototype.drawGraph = function () {
   
   ctx.stroke();
 };
-
 
 // -----------------------------------------------------------------------------------------------
 // Functions constructor
