@@ -62,7 +62,7 @@ footer {
 
 /*some changes*/
 .container {
-    height: 220px;
+    height: 200px;
 }
 
 .settings {
@@ -151,11 +151,16 @@ footer {
 input {
     border: var(--border-size) solid var(--color1);
     font-size: 1.2em;
-    background-color: var(--bg2);
+    background-color: var(--bg1);
     border-radius: 5px;
 }
 
 input:focus {
+    outline: none;
+    border-color: var(--color2);
+}
+
+input:hover {
     outline: none;
     border-color: var(--color2);
 }
@@ -172,21 +177,7 @@ input:focus {
     width: 50px;
 }
 
-.formula-input {
-    width: 400px;
-}
 
-.formula-valid {
-    font-weight: bold;
-
-}
-
-.formula-container {
-    display: inline-block;
-    width: max-content;
-    height: max-content;
-    background-color: #6C9007;
-}
 
 .cur-div {
     display: inline-block;
@@ -210,6 +201,7 @@ input[type=checkbox] {
     width: 300px;
     z-index: 0;
     padding: 10px;
+    cursor: default;
 }
 
 .key {
@@ -225,4 +217,105 @@ input[type=checkbox] {
 
 .txt {
 
+}
+
+#formula-table {
+    width: 100%;
+    border-spacing: 0;
+    border-collapse: collapse;
+}
+
+#formula-table tr {
+    background-color: var(--bg2);
+    vertical-align: top;
+}
+
+#formula-table td {
+    /*border:1px solid black;*/
+    min-width: 20px;
+    padding: 0 3px;
+}
+
+#formula-table td:nth-child(1) {
+    width: 75px;
+}
+
+#formula-table td:nth-child(3) {
+    width: 75px;
+    padding-left: 12px;
+}
+
+#formula-table td:nth-child(4) {
+    width: 25px;
+}
+
+#formula-table td:nth-child(5) {
+    width: 25px;
+}
+
+#formula-table td:nth-child(1) span {
+    line-height: 28px;
+}
+
+
+td .btn {
+
+}
+
+.input-error {
+    background: #be7074;
+}
+
+.formula-label {
+    display: none;
+}
+
+.formula-invalid {
+    color: #c21010;
+    display: block;
+    word-wrap: break-word;
+    font-size: 0.75em;
+    overflow: auto;
+}
+
+.formula-input {
+    width: 100%;
+
+}
+
+.formula-color {
+    cursor: pointer;
+    width: 100%;
+}
+
+.formula-add {
+    background-image: url("img/plus.png");
+    background-size: 30px;
+}
+
+.formula-del {
+    background-image: url("img/minus.png");
+}
+
+.btn {
+    display: inline-block;
+    background-color: var(--bg1);
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 2px solid var(--color1);
+    border-radius: 5px;
+    width: 25px;
+    height: 23px;
+    background-size: 20px;
+    cursor: pointer;
+    outline: none;
+}
+
+.btn:hover {
+    border-color: var(--color2);
+    background-color: #eee;
+}
+
+.btn:active {
+    background-color: #fff;
 }

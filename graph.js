@@ -1,28 +1,35 @@
 const COOKIE_LIFE = 7;
+const DRAWER_COOKIE = 'drawer';
+const NOT = 'нет';
+const DATA_INPUT_ERROR = 'ошибка ввода данных: ';
+const REDRAW_TIMEOUT = 300;
 
-const CLR_VALID = "#d9d7d7";          // input valid value color
-const CLR_ERROR = "#be7074";       // input invalid value color
-const ID_CANVAS_WIDTH = '#cnv-width';
-const ID_CANVAS_HEIGHT = '#cnv-height';
-const ID_CANVAS_SIZE = '#lbl-cnv-size';
-const ID_CANVAS_DIV = '#cnv-div';
-const ID_GRID_SIZE = '#grid-size';
-const ID_GRID_LBL = '#lbl-grid-size';
-const ID_FORMULA = '#formula';
-const ID_FORMULA_VALID = '.formula-valid';
-const ID_STEP = '#step';
+const CLR_DEFAULT_FORMULA = 'red';
 const ID_CANVAS = '#cnv';
+const ID_CANVAS_DIV = '#cnv-div';
+const ID_LABEL_CANVAS_SIZE = '#lbl-cnv-size';
+const ID_GRID_SIZE = '#grid-size';
+const ID_LABEL_GRID = '#lbl-grid-size';
 const ID_SHOW_CURSORS = "#show-cursors";
+
+const ID_FORMULA_TABLE = '#formula-table';
+const CLS_FORMULA_INPUT = 'formula-input';
+const CLS_FORMULA_COLOR = 'formula-color';
+const CLS_FORMULA_LABEL = 'formula-label';
+const CLS_FORMULA_INVALID = 'formula-invalid';
+const CLS_ERROR_INPUT = 'input-error';
+const CLS_FORMULA_ADD = 'formula-add';
+const CLS_FORMULA_DEL = 'formula-del';
 
 const ID_AXIS_X1 = '#axis-X-start';
 const ID_AXIS_X2 = '#axis-X-end';
 const ID_AXIS_Y1 = '#axis-Y-start';
 const ID_AXIS_Y2 = '#axis-Y-end';
 
-const ID_HELP = 'help';
-const ID_HELP_LINE = 'help-line';
-const ID_HELP_FUNC = 'help-func';
-const ID_HELP_DESCR = 'help-descr';
+const ID_HELP = '#help';
+const CLS_HELP_LINE = 'help-line';
+const CLS_HELP_FUNC = 'help-func';
+const CLS_HELP_DESCR = 'help-descr';
 
 var drawer;
 var functions;
@@ -33,32 +40,62 @@ function onError(drw, err) {
 }
 
 function createHelp() {
-  let helpDiv = document.getElementsByClassName(ID_HELP)[0];
-  let helpLine = document.getElementsByClassName(ID_HELP_LINE)[0];
+  // let helpDiv = document.getElementsByClassName(ID_HELP)[0];
+  // let helpLine = document.getElementsByClassName(CLS_HELP_LINE)[0];
+  //
+  // for (let i = 0; i < functions.count; i++) {
+  //   let cln = helpLine.cloneNode(true);
+  //   let helpFunc = cln.getElementsByClassName(CLS_HELP_FUNC)[0];
+  //   let helpDescr = cln.getElementsByClassName(CLS_HELP_DESCR)[0];
+  //   let fnc = functions.getKey(i);
+  //
+  //   helpFunc.innerText = fnc.usr;
+  //   helpDescr.innerText = fnc.dsc;
+  //   helpFunc.setAttribute('title', fnc.js);
+  //   cln.removeAttribute('hidden');
+  //   helpDiv.appendChild(cln);
+  // }
+}
+
+function onFormulaBtnClick(btn) {
+  let $table = $(ID_FORMULA_TABLE);
+  let $rows = $(ID_FORMULA_TABLE + ' tr');
+  let $btnRow = $(btn).parent().parent();
+  let update;
   
-  for (let i = 0; i < functions.count; i++) {
-    let cln = helpLine.cloneNode(true);
-    let helpFunc = cln.getElementsByClassName(ID_HELP_FUNC)[0];
-    let helpDescr = cln.getElementsByClassName(ID_HELP_DESCR)[0];
-    let fnc = functions.getKey(i);
-    
-    helpFunc.innerText = fnc.usr;
-    helpDescr.innerText = fnc.dsc;
-    helpFunc.setAttribute('title', fnc.js);
-    cln.removeAttribute('hidden');
-    helpDiv.appendChild(cln);
+  if ( $(btn).hasClass(CLS_FORMULA_ADD) ) { // add button
+    $btnRow.clone().appendTo($table);
+    update = true;
+  }
+  else if ( $(btn).hasClass(CLS_FORMULA_DEL) ) { // del button
+    if ( $rows.length > 1 ) {
+      $btnRow.remove();
+      update = true;
+    }
+  }
+  
+  if ( update ) {
+    loadDrawerFromElements(drawer);
   }
 }
 
+function addFormula() {
+  return $(ID_FORMULA_TABLE + ' tbody').children(':last')
+    .clone().appendTo($(ID_FORMULA_TABLE))
+}
+
+function clearFormulaList() {
+  $(ID_FORMULA_TABLE + ' tbody').children(':not(:last)').remove();
+}
 
 // Событие при изменении параметров канвы.
 // События от контролов разнесены на две функции из-за того, что при изменении размеров
 // канвы всё изображение стирается и получается мерцание. Зачем лишний раз мерцать?!
 function onResizeCanvas() {
-  let cnv = $(ID_CANVAS)[0];
+  let $cnv = $(ID_CANVAS);
   let div = $(ID_CANVAS_DIV)[0];
-  let lbl = $(ID_CANVAS_SIZE)[0];
-  let body = $('body')[0];
+  let $lbl = $(ID_LABEL_CANVAS_SIZE);
+  let $body = $('body');
   
   // Вся канва
   let style = window.getComputedStyle(div, null);
@@ -68,163 +105,133 @@ function onResizeCanvas() {
   let rect = div.getBoundingClientRect();
   drawer.canvasCoord.set(0, 0, w, h - dy);
   
-  // область графика
-  drawer.graphCoord.set(
-    drawer.canvasCoord.x1 + Drawer.CANVAS_PADDING,
-    drawer.canvasCoord.y1 + Drawer.CANVAS_PADDING,
-    drawer.canvasCoord.x2 - Drawer.CANVAS_PADDING,
-    drawer.canvasCoord.y2 - Drawer.CANVAS_PADDING);
-  
-  lbl.innerText = `${w}\u00D7${h}`;
-  cnv.setAttribute("width", w);
-  cnv.setAttribute("height", h - dy);
+  $lbl.text(`${w}\u00D7${h}`);
+  $cnv.attr("width", w);
+  $cnv.attr("height", h - dy);
   
   // move the Resize icon at bottom-right corner
-  body.style.backgroundPositionX = Math.trunc(rect.x + w + window.scrollX) + 'px';
-  body.style.backgroundPositionY = Math.trunc(rect.y + h + window.scrollY) + 'px';
+  $body.css('background-position-x', Math.trunc(rect.x + w + window.scrollX) + 'px');
+  $body.css('background-position-y', Math.trunc(rect.y + h + window.scrollY) + 'px');
   
+  drawer.reload(false);
   drawer.redrawTimeout(drawer, 0);
 }
 
+
 // Событие при изменении параметров графика
 function onInput(refresh) {
-  try {
-    let inpGrid = $(ID_GRID_SIZE)[0];
-    let lblGrid = $(ID_GRID_LBL)[0];
-    let inpFormula = $(ID_FORMULA)[0];
-    let inpStep = $(ID_STEP)[0];
-    let inpX1 = $(ID_AXIS_X1)[0];
-    let inpX2 = $(ID_AXIS_X2)[0];
-    let inpY1 = $(ID_AXIS_Y1)[0];
-    let inpY2 = $(ID_AXIS_Y2)[0];
-    let lblFormulaValid = $(ID_FORMULA_VALID)[0];
-    let cbxCursors = $(ID_SHOW_CURSORS)[0];
-    let axis = drawer.axisCoord;
-    
-    drawer.gridCount = Math.abs(+inpGrid.value);
-    if (!Number.isFinite(drawer.gridCount) || drawer.gridCount < 0) {
-      drawer.gridCount = Drawer.DEFAULT_GRID;
-    }
-    
-    lblGrid.innerText = drawer.gridCount === 0 ? 'нет' : drawer.gridCount;
-    
-    drawer.formula = functions.correctFormula(inpFormula.value);
-    try {
-      {
-        let x;
-        let y = new Function('x', drawer.formula);
-      }
-      inpFormula.style.background = CLR_VALID;
-      lblFormulaValid.setAttribute('hidden', '');
-    } catch (e) {
-      lblFormulaValid.innerText = e.message;
-      lblFormulaValid.removeAttribute('hidden');
-      lblFormulaValid.style.color = 'maroon';
-      inpFormula.style.background = CLR_ERROR;
-      drawer.formula = null;
-    }
-    
-    if (refresh !== false) {
-      drawer.axisCoord.x1 = +inpX1.value;
-      inpX1.style.background = isValid(axis.x1) ? CLR_VALID : CLR_ERROR;
-      axis.x1 = axis.x1 || 0;
-      
-      axis.x2 = +inpX2.value;
-      inpX2.style.background = isValid(axis.x2) ? CLR_VALID : CLR_ERROR;
-      axis.x2 = axis.x2 || 0;
-      
-      axis.y1 = +inpY1.value;
-      inpY1.style.background = isValid(axis.y1) ? CLR_VALID : CLR_ERROR;
-      axis.y1 = axis.y1 || 0;
-      
-      axis.y2 = +inpY2.value;
-      inpY2.style.background = isValid(axis.y2) ? CLR_VALID : CLR_ERROR;
-      axis.y2 = axis.y2 || 0;
-    }
-    
-    drawer.showCursors = cbxCursors.checked;
-    
-    // сохраняем в куки
-    setCookie(ID_GRID_SIZE, inpGrid.value, COOKIE_LIFE);
-    setCookie(ID_FORMULA, inpFormula.value, COOKIE_LIFE);
-    setCookie(ID_STEP, inpStep.value, COOKIE_LIFE);
-    setCookie(ID_AXIS_X1, inpX1.value, COOKIE_LIFE);
-    setCookie(ID_AXIS_X2, inpX2.value, COOKIE_LIFE);
-    setCookie(ID_AXIS_Y1, inpY1.value, COOKIE_LIFE);
-    setCookie(ID_AXIS_Y2, inpY2.value, COOKIE_LIFE);
-    setCookie(ID_SHOW_CURSORS, cbxCursors.checked.toString(), COOKIE_LIFE);
-  } catch (e) {
-    debug('ошибка ввода данных: ' + e.message);
-  }
-  
-  drawer.redrawTimeout(300);
+  loadDrawerFromElements(drawer, refresh)
 }
 
 function isValid(value) {
   return isFinite(value);
 }
 
-function loadCookies() {
-  // загружаем контролы
-  try {
-    let inpGrid = $(ID_GRID_SIZE)[0];
-    let inpFormula = $(ID_FORMULA)[0];
-    let inpStep = $(ID_STEP)[0];
-    let inpX1 = $(ID_AXIS_X1)[0];
-    let inpX2 = $(ID_AXIS_X2)[0];
-    let inpY1 = $(ID_AXIS_Y1)[0];
-    let inpY2 = $(ID_AXIS_Y2)[0];
-    let cbxCursors = $(ID_SHOW_CURSORS)[0];
-    
-    /*		if (cookieExists(ID_CANVAS_WIDTH)) {
-          inpW.value = getCookie(ID_CANVAS_WIDTH)
-        }
-        
-        if (cookieExists(ID_CANVAS_HEIGHT)) {
-          inpH.value = getCookie(ID_CANVAS_HEIGHT);
-        }
-        */
-    if (cookieExists(ID_GRID_SIZE)) {
-      inpGrid.value = getCookie(ID_GRID_SIZE);
-    }
-    
-    if (cookieExists(ID_FORMULA)) {
-      inpFormula.value = getCookie(ID_FORMULA);
-    }
-    
-    if (cookieExists(ID_STEP)) {
-      inpStep.value = getCookie(ID_STEP);
-    }
-    
-    if (cookieExists(ID_AXIS_X1)) {
-      inpX1.value = getCookie(ID_AXIS_X1);
-    }
-    
-    if (cookieExists(ID_AXIS_X2)) {
-      inpX2.value = getCookie(ID_AXIS_X2);
-    }
+function loadElementsFromDrawer(drw) {
+  $(ID_GRID_SIZE).val(drw.gridCount);
+  $(ID_AXIS_X1).val(drw.userCoord.x1);
+  $(ID_AXIS_X2).val(drw.userCoord.x2);
+  $(ID_AXIS_Y1).val(drw.userCoord.y1);
+  $(ID_AXIS_Y2).val(drw.userCoord.y2);
+  $(ID_SHOW_CURSORS).val(drw.showCursors);
   
-    if (cookieExists(ID_AXIS_Y1)) {
-      inpY1.value = getCookie(ID_AXIS_Y1);
+  // reload formula list
+  clearFormulaList();
+  for (let i = 0; i < drw.formula.length; i++) {
+    if ( i > 0 ) {
+      addFormula();
     }
-  
-    if (cookieExists(ID_AXIS_Y2)) {
-      inpY2.value = getCookie(ID_AXIS_Y2);
-    }
-  
-    if (cookieExists(ID_SHOW_CURSORS)) {
-      cbxCursors.checked = getCookie(ID_SHOW_CURSORS) === 'true';
-    }
-  
-  } catch (err) {
-    debug('cannot paste cookies! ' + err.message);
+    let f = drw.formula[i].replace('Math.', '');
+    $(ID_FORMULA_TABLE + ' tr:last .' + CLS_FORMULA_INPUT).val(f);
+    $(ID_FORMULA_TABLE + ' tr:last .' + CLS_FORMULA_COLOR).val(drw.formulaColors[i] || CLR_DEFAULT_FORMULA);
   }
+}
+
+function loadDrawerFromElements(drw, reload) {
+  let $inpGrid = $(ID_GRID_SIZE);
+  let $inpX1 = $(ID_AXIS_X1);
+  let $inpX2 = $(ID_AXIS_X2);
+  let $inpY1 = $(ID_AXIS_Y1);
+  let $inpY2 = $(ID_AXIS_Y2);
+  let $cbxCursors = $(ID_SHOW_CURSORS);
+  let axis = new Coord();
+  
+  drw.gridCount = Math.abs(+$inpGrid.val());
+  if ( !isValid(drw.gridCount) || drw.gridCount < 0 ) {
+    drw.gridCount = drw.DEF_GRID_COUNT;
+  }
+  
+  drw.showCursors = $cbxCursors.is(":checked");
+  axis.set(+$inpX1.val(), +$inpY1.val(), +$inpX2.val(), +$inpY2.val());
+  
+  drw.formula = [];
+  drw.formulaColors = [];
+  let rows = $(ID_FORMULA_TABLE + ' tbody tr');
+  for (let rw = 0; rw < rows.length; rw++) {
+    let $lbl = $(ID_FORMULA_TABLE + ` tbody tr:eq(${rw}) .` + CLS_FORMULA_LABEL);
+    let $formulaInp = $(ID_FORMULA_TABLE + ` tbody tr:eq(${rw}) .` + CLS_FORMULA_INPUT);
+    let $colorInp = $(ID_FORMULA_TABLE + ` tbody tr:eq(${rw}) .` + CLS_FORMULA_COLOR);
+    let f = $formulaInp.val();
+    f = functions.correctFormula(f);
+    
+    try {
+      {
+        let x;
+        let y = new Function('x', f);
+      }
+      $lbl.removeClass(CLS_FORMULA_INVALID);
+      $formulaInp.removeClass(CLS_ERROR_INPUT);
+      drw.formulaColors.push($colorInp.val());
+      drw.formula.push(f);
+    } catch (e) {
+      $lbl.text(e.message);
+      $lbl.addClass(CLS_FORMULA_INVALID);
+      $formulaInp.addClass(CLS_ERROR_INPUT);
+    }
+  }
+  
+  // check axis
+  let $arr = [$inpX1, $inpY1, $inpX2, $inpY2];
+  for (let i = 0; i < $arr.length; i++) {
+    axis.setInd(i, +$arr[i].val());
+    if ( isValid(axis.getInd(i)) ) {
+      $arr[i].removeClass(CLS_ERROR_INPUT);
+    }
+    else {
+      $arr[i].addClass(CLS_ERROR_INPUT);
+    }
+  }
+  
+  if ( axis.isValid() ) {
+    drw.userCoord.copyFrom(axis)
+    saveDrawerToCookies(drw, DRAWER_COOKIE);
+  }
+  else {
+    for (let i = 0; i < $arr.length; i++) {
+      $arr[i].addClass(CLS_ERROR_INPUT);
+    }
+  }
+  
+  if ( reload !== false ) {
+    drw.reload(false);
+  }
+  drw.redrawTimeout(REDRAW_TIMEOUT);
+}
+
+function loadDrawerFromCookies(drw, param) {
+  return cookieExists(param) ? drw.fromString(getCookie(param)) : false;
+}
+
+function saveDrawerToCookies(drw, param) {
+  eraseCookie(param);
+  let s = drw.toString();
+  setCookie(param, s, COOKIE_LIFE);
 }
 
 function loadPage() {
   functions = new Functions();
   createHelp();
-  drawer = new Drawer('#cnv');
+  drawer = new Drawer('cnv');
   drawer.onError = onError;
   
   resizeObserver = new ResizeObserver(entries => {
@@ -233,9 +240,9 @@ function loadPage() {
   resizeObserver.observe($(ID_CANVAS_DIV)[0]);
   resizeObserver.observe($('body')[0]);
   
-  loadCookies();
+  loadDrawerFromCookies(drawer, DRAWER_COOKIE);
+  loadElementsFromDrawer(drawer);
   onResizeCanvas(); // <= redraw here
-  onInput(); // <= redraw here
 }
 
 function debug(msg) {

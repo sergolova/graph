@@ -11,15 +11,19 @@ Drawer.TRANSPARENT_BG = false;
 Drawer.SERIF_TEXT_INDENT_X = 5;
 Drawer.SERIF_TEXT_INDENT_Y = 5;
 Drawer.WHEEL_PERCENT = 10;
+Drawer.ZOOM_CURSOR_TIMEOUT = 300;
 
 Drawer.CUR_DRAG = 'grab';
 Drawer.CUR_NORMAL = 'crosshair';
-Drawer.CUR_ZOOM = 'zoom-in';
+Drawer.CUR_ZOOM = 'zoom';
+Drawer.CUR_ZOOMIN = 'zoom-in';
+Drawer.CUR_ZOOMOUT = 'zoom-out';
 
 Drawer.HIGH_QUALITY = 1;
 Drawer.LOW_QUALITY = 3;
 
 // colors
+Drawer.CLR_FORMULA_DEFAULT = "#FF0000";
 Drawer.CLR_CANVAS_BG = 1;
 Drawer.CLR_GRAPH_BG = "#e0e0e0";
 Drawer.CLR_GRID_BG = "#EEE";
@@ -32,7 +36,6 @@ Drawer.CLR_CURSOR_Y_TEXT = '#0c5d00';
 Drawer.CLR_CURSOR_TEXT = '#004257';
 Drawer.CLR_SERIF = "#555";
 Drawer.CLR_SERIF_TEXT = '#44A';
-Drawer.CLR_FORMULA = "#F40";
 Drawer.CLR_SEL_FW = 'rgba(200,100,100,0.6)';
 Drawer.CLR_SEL_FW_BG = 'rgba(200,100,100,0.3)';
 Drawer.CLR_SEL_FW_TEXT = 'rgba(200,100,100,1)';
@@ -43,21 +46,29 @@ Drawer.CLR_SEL_RV_TEXT = 'rgba(0,66,87,1)';
 function Drawer(canvasID) {
   // declare properties 
   this.canvasID = canvasID;
-  this.context = null;
+  Object.defineProperties(this, {
+    'canvasElem': {
+      get: () => document.getElementById(this.canvasID)
+    }
+  });
   
+  this.context = null;
   this.curPoint = new Point();          // cursor point. Relative to the upper left corner of the canvas
-  this.axisCoord = new Coord(-10, -10, 10, 10);   // Вычислительная система координат
-  this.graphCoord = new Coord(40, 400, 600, 40);  // Размеры канвы графика
+  this.userCoord = new Coord(-10, -10, 10, 10);   // Вычислительная система координат, заданная пользователем
+  this.axisCoord = new Coord();   // Текущая вычислительная система координат в зависимости от Zoom или Drag.
+  this.graphCoord = new Coord();  // Размеры канвы графика. Вычисляется
   this.canvasCoord = new Coord(0, 0, 1000, 1000); // Размеры всей канвы для рисования
   this.canvasData = null;
-  this.formula = '';
+  this.formula = [];
+  this.formulaColors = [];
   this.showCursors = true;
   this.gridCount = Drawer.DEF_GRID_COUNT;
   this.zoomStep = Drawer.DEF_ZOOM_STEP;
-  this.quality = 1;  //
+  this.quality = 1;
   this.onError = null;
   
   // declare private variables
+  this._JSONFields = 'userCoord,canvasCoord,formula,formulaColors,showCursors,gridCount,x1,y1,x2,y2';
   this._timer = null; // redraw timer
   this._cursorSave = null;
   
@@ -85,38 +96,82 @@ function Drawer(canvasID) {
   
   // call when constructing prototype!
   this.setEvents();
+};
+
+Drawer.prototype.toString = function () {
+  return JSON.stringify(this, this._JSONFields.split`,`);
+};
+
+Drawer.prototype.fromString = function (str) {
+  let num = 0; // number of loaded fields
+  if ( str ) {
+    let obj = JSON.parse(str);
+    let fields = this._JSONFields.split(',');
+    for (const [key, value] of Object.entries(obj)) {
+      if ( fields.includes(key) ) {
+        if ( typeof this[key] === 'object' ) {
+          Object.assign(this[key], value);
+        }
+        else {
+          this[key] = value;
+        }
+        num++;
+      }
+    }
+    this.reload();
+  }
+  return num > 0; // or num===this._JSONFields.length
+};
+
+Drawer.prototype.reload = function (needRedraw = false) {
+  this.axisCoord.copyFrom(this.userCoord);
+  this.graphCoord.copyFrom(this.canvasCoord);
+  this.graphCoord.modify(+Drawer.CANVAS_PADDING, +Drawer.CANVAS_PADDING, -Drawer.CANVAS_PADDING, -Drawer.CANVAS_PADDING);
+  this.curPoint.set(0, 0);
+  this.onSelEnd();
+  this.onDragEnd();
+  if ( needRedraw ) {
+    this.redraw();
+    this.drawCursor();
+  }
 }
 
 Drawer.prototype.setEvents = function () {
-  let cnv = $(this.canvasID)[0];
-  if (cnv.getContext) {
-    this.context = cnv.getContext('2d', {willReadFrequently: true});
-    cnv.addEventListener('wheel', this.onMouseWheel.bind(this));
-    cnv.addEventListener('mousedown', this.onCanvasMouseDown.bind(this));
-    cnv.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
-    cnv.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
-    cnv.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
-    cnv.addEventListener('dblclick', this.onCanvasDoubleClick.bind(this));
-    cnv.addEventListener('contextmenu', this.onCanvasContextMenu.bind(this));
-    return true;
-  } else {
-    cnv.removeEventListener('mousedown');
-    cnv.removeEventListener('mousemove');
-    cnv.removeEventListener('mouseleave');
-    cnv.removeEventListener('mouseup');
-    cnv.removeEventListener('contextmenu');
-    cnv.removeEventListener('wheel');
-    return false;
+  let cnv = this.canvasElem;
+  if ( cnv ) {
+    if ( cnv.getContext ) {
+      this.context = cnv.getContext('2d', {willReadFrequently: true});
+      cnv.addEventListener('wheel', this.onMouseWheel.bind(this));
+      cnv.addEventListener('mousedown', this.onCanvasMouseDown.bind(this));
+      cnv.addEventListener('mousemove', this.onCanvasMouseMove.bind(this));
+      cnv.addEventListener('mouseleave', this.onCanvasMouseLeave.bind(this));
+      cnv.addEventListener('mouseup', this.onCanvasMouseUp.bind(this));
+      cnv.addEventListener('dblclick', this.onCanvasDoubleClick.bind(this));
+      cnv.addEventListener('contextmenu', this.onCanvasContextMenu.bind(this));
+      return true;
+    }
+    else {
+      this.context = null;
+      cnv.removeEventListener('mousedown');
+      cnv.removeEventListener('mousemove');
+      cnv.removeEventListener('mouseleave');
+      cnv.removeEventListener('mouseup');
+      cnv.removeEventListener('contextmenu');
+      cnv.removeEventListener('dblclick');
+      cnv.removeEventListener('wheel');
+      return false;
+    }
   }
 };
 
 Drawer.prototype.onCanvasMouseDown = function () {
   let event = window.event;
   
-  if ((event.button === 0) && event.ctrlKey) {
+  if ( (event.button === 0) && event.ctrlKey ) {
     this._sel.coord = new Coord(event.offsetX, event.offsetY, 0, 0);
     this.onSelStart();
-  } else if ((event.button === 0) && !event.ctrlKey) {
+  }
+  else if ( (event.button === 0) && !event.ctrlKey ) {
     // save mouse start position
     this._drag.coord.set(event.offsetX, event.offsetY, event.offsetX, event.offsetY);
     // save axis at the moment of start of dragging
@@ -126,31 +181,41 @@ Drawer.prototype.onCanvasMouseDown = function () {
 };
 
 Drawer.prototype.onCanvasMouseMove = function () {
-  if (this._sel.begin) {
+  if ( this._sel.begin ) {
     this._sel.coord.set2(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawSelection();
-  } else if (this._drag.begin) {
+    if ( this._sel.coord.isInverterX && this._sel.coord.isInverterY ) {
+      this.canvasElem.style.cursor = Drawer.CUR_ZOOMOUT;
+    }
+    else {
+      this.canvasElem.style.cursor = Drawer.CUR_ZOOMIN;
+    }
+    
+  }
+  else if ( this._drag.begin ) {
     this._drag.coord.set2(event.offsetX, event.offsetY);
     this.onDrag();
-  } else if (this.showCursors) {
+  }
+  else if ( this.showCursors ) {
     this.curPoint = new Point(event.offsetX, event.offsetY);
     this.paste(this.canvasCoord.x1, this.canvasCoord.y1); // restore canvas image
     this.drawCursor();
   }
-  console.log('onMouseMove')
 };
 
 Drawer.prototype.onCanvasMouseUp = function () {
   let event = window.event;
   
-  if (this._sel.begin) {
+  if ( this._sel.begin ) {
     this._sel.coord.set2(event.offsetX, event.offsetY);
     this.onSelEnd();
     this.onZoomStart();
-  } else if (this._drag.begin) {
+  }
+  else if ( this._drag.begin ) {
     
     this.onDragEnd();
+    this.redraw(); // need redraw after quality change
   }
   this._canvasData = null;
 };
@@ -161,13 +226,17 @@ Drawer.prototype.onCanvasMouseLeave = function () {
 
 Drawer.prototype.onSelStart = function () {
   this._sel.begin = true;
-  this._cursorSave = $(this.canvasID)[0].style.cursor;
-  $(this.canvasID)[0].style.cursor = Drawer.CUR_ZOOM;
+  if ( this.canvasElem ) {
+    this._cursorSave = this.canvasElem.style.cursor;
+    this.canvasElem.style.cursor = Drawer.CUR_ZOOM;
+  }
 }
 
 Drawer.prototype.onSelEnd = function () {
   this._sel.begin = false;
-  $(this.canvasID)[0].style.cursor = this._cursorSave;
+  if ( this.canvasElem ) {
+    this.canvasElem.style.cursor = this._cursorSave;
+  }
 }
 
 Drawer.prototype.onCanvasContextMenu = function () {
@@ -177,7 +246,7 @@ Drawer.prototype.onCanvasContextMenu = function () {
 };
 
 Drawer.prototype.onCanvasDoubleClick = function () {
-  onInput(); // reload, undo zoom
+  this.reload();
 };
 
 Drawer.prototype.onMouseWheel = function () {
@@ -200,7 +269,6 @@ Drawer.prototype.onMouseWheel = function () {
   this.onSelEnd();
   this.redraw();
   this.onCanvasMouseMove();
-  
 };
 
 Drawer.prototype.onZoomStart = function () {
@@ -209,14 +277,16 @@ Drawer.prototype.onZoomStart = function () {
   let axis = this.axisCoord;
   let canvas = this.canvasCoord;
   
-  if ((sel.width < 10) || (sel.height < 10)) {
+  if ( (sel.width < 10) || (sel.height < 10) ) {
     // erase selection on canvas
     this.paste(canvas.x1, canvas.y1)
-  } else
+  }
+  else
     // need undo zoom
-  if (sel.isInverterX && sel.isInverterY) {
-    onInput();
-  } else {
+  if ( sel.isInverterX && sel.isInverterY ) {
+    this.reload(true);
+  }
+  else {
     // need zoom
     sel.normalize();
     
@@ -232,12 +302,12 @@ Drawer.prototype.onZoomStart = function () {
     this._zoom.deltaX2 = Math.abs(axis.x2 - zoomCoord.x2) / this.zoomStep;
     this._zoom.deltaY1 = Math.abs(axis.y1 - zoomCoord.y1) / this.zoomStep;
     this._zoom.deltaY2 = Math.abs(axis.y2 - zoomCoord.y2) / this.zoomStep;
-  
+    
     debug('dx1=' + this._zoom.deltaX1.toFixed(1) +
       ' dy1=' + this._zoom.deltaY1.toFixed(1) +
       ' dx2=' + this._zoom.deltaX2.toFixed(1) +
       ' dy2=' + this._zoom.deltaY2.toFixed(1));
-  
+    
     this._zoom.iterator = 0; // strip
     this.quality = Drawer.LOW_QUALITY; // decrease quality for speed
     clearTimeout(this._zoom.timer);
@@ -255,7 +325,7 @@ Drawer.prototype.onZoomEnd = function () {
 
 Drawer.prototype.onZoom = function () {
   this._zoom.iterator++;
-  if (this._zoom.iterator > this.zoomStep) {
+  if ( this._zoom.iterator > this.zoomStep ) {
     this.onZoomEnd();
     return;
   }
@@ -272,7 +342,7 @@ Drawer.prototype.onZoom = function () {
 };
 
 Drawer.prototype.callOnError = function (err) {
-  if (this.onError) {
+  if ( this.onError ) {
     this.onError(this, err);
   }
   return false; //always!
@@ -306,13 +376,16 @@ Drawer.prototype._fillBorder = function () {
 };
 
 Drawer.prototype.checkCriticalVariables = function () {
-  if (!this.context) {
+  if ( !this.context ) {
     return this.callOnError('Context is null');
-  } else if (!this.axisCoord.isValid()) {
+  }
+  else if ( !this.axisCoord.isValid() ) {
     return this.callOnError('Invalid axisCoord');
-  } else if (!this.graphCoord.isValid()) {
+  }
+  else if ( !this.graphCoord.isValid() ) {
     return this.callOnError('Invalid graphCoord');
-  } else if (!this.canvasCoord.isValid()) {
+  }
+  else if ( !this.canvasCoord.isValid() ) {
     return this.callOnError('Invalid canvasCoord');
   }
   return true;
@@ -320,7 +393,7 @@ Drawer.prototype.checkCriticalVariables = function () {
 
 // main draw function
 Drawer.prototype.redraw = function () {
-  if (!this.checkCriticalVariables()) {
+  if ( !this.checkCriticalVariables() ) {
     return;
   }
   
@@ -328,9 +401,10 @@ Drawer.prototype.redraw = function () {
     //  this.clearCanvas(); // clear all
     this._drawGrid();
     this.drawGraph();
-    if (Drawer.TRANSPARENT_BG) {
+    if ( Drawer.TRANSPARENT_BG ) {
       this._clearBorder();
-    } else {
+    }
+    else {
       this._fillBorder();
     }
     this._drawAxis();
@@ -348,16 +422,17 @@ Drawer.prototype.clearCanvas = function () {
 };
 
 Drawer.prototype.copy = function (coord) {
-  if (!coord) {
+  if ( !coord ) {
     coord = this.canvasCoord;
   }
   this.canvasData = this.context.getImageData(coord.x1, coord.y1, coord.x2, coord.y2);
 };
 
 Drawer.prototype.paste = function (x, y) {
-  if (this.canvasData) {
+  if ( this.canvasData ) {
     this.context.putImageData(this.canvasData, x, y);
-  } else {
+  }
+  else {
     console.log('Drawer.prototype.paste: canvasData=' + this.canvasData);
   }
 };
@@ -377,16 +452,16 @@ Drawer.prototype.selToValidSel = function () {
   validSel.normalize();
   
   // selection rect must be in graph rect
-  if (validSel.x1 < graph.x1) {
+  if ( validSel.x1 < graph.x1 ) {
     validSel.x1 = graph.x1;
   }
-  if (validSel.y1 < graph.y1) {
+  if ( validSel.y1 < graph.y1 ) {
     validSel.y1 = graph.y1;
   }
-  if (validSel.x2 > graph.x2) {
+  if ( validSel.x2 > graph.x2 ) {
     validSel.x2 = graph.x2;
   }
-  if (validSel.y2 > graph.y2) {
+  if ( validSel.y2 > graph.y2 ) {
     validSel.y2 = graph.y2;
   }
   return validSel;
@@ -415,15 +490,17 @@ Drawer.prototype.getTextHintPoint = function (ctx, txt, x, y, coord) {
   let r = ctx.measureText(txt);
   let fontHeight = r.fontBoundingBoxAscent + r.fontBoundingBoxDescent;
   
-  if (x + r.width + Drawer.POINT_TEXT_INDENT >= coord.x2) {
+  if ( x + r.width + Drawer.POINT_TEXT_INDENT >= coord.x2 ) {
     xVal = x - Drawer.POINT_TEXT_INDENT - r.width;
-  } else {
+  }
+  else {
     xVal = x + Drawer.POINT_TEXT_INDENT;
   }
   
-  if (y + fontHeight + Drawer.POINT_TEXT_INDENT >= coord.y2) {
+  if ( y + fontHeight + Drawer.POINT_TEXT_INDENT >= coord.y2 ) {
     yVal = y - Drawer.POINT_TEXT_INDENT - fontHeight;
-  } else {
+  }
+  else {
     yVal = y + Drawer.POINT_TEXT_INDENT;
   }
   
@@ -434,17 +511,20 @@ Drawer.prototype.onDragStart = function () {
   this._drag.begin = true;
   this.quality = Drawer.LOW_QUALITY;
   // save and set drag cursor
-  this._cursorSave = $(this.canvasID)[0].style.cursor;
-  $(this.canvasID)[0].style.cursor = Drawer.CUR_DRAG;
+  if ( this.canvasElem ) {
+    this._cursorSave = this.canvasElem.style.cursor;
+    this.canvasElem.style.cursor = Drawer.CUR_DRAG;
+  }
 }
 
 Drawer.prototype.onDragEnd = function () {
   this._drag.begin = false;
   this.quality = Drawer.HIGH_QUALITY;
-  this.redraw(); // need redraw after quality change
   // restore cursor
-  $(this.canvasID)[0].style.cursor = this._cursorSave;
-}
+  if ( this.canvasElem ) {
+    this.canvasElem.style.cursor = this._cursorSave;
+  }
+};
 
 Drawer.prototype.onDrag = function () {
   let graph = this.graphCoord;
@@ -467,7 +547,7 @@ Drawer.prototype.onDrag = function () {
 };
 
 Drawer.prototype.drawCursor = function () {
-  if (!this.checkCriticalVariables()) {
+  if ( !this.checkCriticalVariables() ) {
     return;
   }
   
@@ -479,7 +559,7 @@ Drawer.prototype.drawCursor = function () {
   let ya1 = graph.pointYToCoord(cur.y, axis);
   
   // cursor in graph rect
-  if (graph.containPoint(cur.x, cur.y)) {
+  if ( graph.containPoint(cur.x, cur.y) ) {
     // draw cursor cross
     ctx.beginPath();
     ctx.strokeStyle = Drawer.CLR_CURSOR_CROSS;
@@ -498,34 +578,37 @@ Drawer.prototype.drawCursor = function () {
     ctx.fillText(txt, pt.x, pt.y);
     
     // calc Y-value for cursor
-    let evalFunc = new Function('x', 'return ' + this.formula);
-    let x = xa1;
-    let y;
-    let error = false;
-    try {
-      y = evalFunc(x);
-    } catch (e) {
-      error = true;
-    }
-    
-    if (!error) {
-      let yc = axis.pointYToCoord(y, graph); // Y-axis => Y-Canvas
-      
-      // draw Y-cursor cross
-      ctx.beginPath();
-      ctx.strokeStyle = Drawer.CLR_CURSOR_Y;
-      if (graph.containPoint(cur.x, yc)) {
-        ctx.moveTo(graph.x1, yc);
-        ctx.lineTo(graph.x2, yc);
-        ctx.arc(cur.x, yc, Drawer.CURSOR_RAD, 0, 2 * Math.PI);
-        
-        // draw text for Y-cursor cross
-        ctx.fillStyle = Drawer.CLR_CURSOR_Y_TEXT;
-        let txt = this.formatPointStr(xa1, y);
-        let pt = this.getTextHintPoint(ctx, txt, cur.x, yc, graph);
-        ctx.fillText(txt, pt.x, pt.y);
+    for (let iForm = 0; iForm < this.formula.length; iForm++) {
+      let f = this.formula[iForm];
+      let evalFunc = new Function('x', 'return ' + f);
+      let x = xa1;
+      let y;
+      let error = false;
+      try {
+        y = evalFunc(x);
+      } catch (e) {
+        error = true;
       }
-      ctx.stroke();
+      
+      if ( !error ) {
+        let yc = axis.pointYToCoord(y, graph); // Y-axis => Y-Canvas
+        
+        // draw Y-cursor cross
+        ctx.beginPath();
+        ctx.strokeStyle = this.formulaColors[iForm];
+        if ( graph.containPoint(cur.x, yc) ) {
+          ctx.moveTo(graph.x1, yc);
+          ctx.lineTo(graph.x2, yc);
+          ctx.arc(cur.x, yc, Drawer.CURSOR_RAD, 0, 2 * Math.PI);
+          
+          // draw text for Y-cursor cross
+          ctx.fillStyle = Drawer.CLR_CURSOR_Y_TEXT;
+          let txt = this.formatPointStr(xa1, y);
+          let pt = this.getTextHintPoint(ctx, txt, cur.x, yc, graph);
+          ctx.fillText(txt, pt.x, pt.y);
+        }
+        ctx.stroke();
+      }// error
     }
   }
 };
@@ -566,7 +649,7 @@ Drawer.prototype.clearSelection = function () {
 };
 
 Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
-  if (!this.gridCount) {
+  if ( !this.gridCount ) {
     return
   }
   
@@ -578,13 +661,13 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
   ctx.beginPath();
   ctx.strokeStyle = Drawer.CLR_SERIF;
   
-  if (drawSerif) {
+  if ( drawSerif ) {
     let gridLen = graph.width / this.gridCount;
     for (let i = gridLen; i < (graph.width - 1); i += gridLen) {
       ctx.moveTo(graph.x1 + i, graph.y2 + Drawer.SERIF_SIZE);
       ctx.lineTo(graph.x1 + i, graph.y2 - Drawer.SERIF_SIZE);
     }
-  
+    
     gridLen = graph.height / this.gridCount;
     for (let i = gridLen; i < (graph.height - 1); i += gridLen) {
       ctx.moveTo(graph.x1 - Drawer.SERIF_SIZE, graph.y1 + i);
@@ -593,12 +676,12 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
     ctx.stroke();
   }
   
-  if (drawText) {
+  if ( drawText ) {
     ctx.beginPath();
     ctx.fillStyle = Drawer.CLR_SERIF_TEXT;
     ctx.textBaseline = 'top';
     ctx.textAlign = 'center';
-  
+    
     let gridLen = graph.width / this.gridCount;
     // let fontHeight = r.fontBoundingBoxAscent + r.fontBoundingBoxDescent;
     let prevTextBorder = cnv.x1;
@@ -606,23 +689,23 @@ Drawer.prototype._drawSerifsAndText = function (drawSerif, drawText) {
       let txt = graph.pointXToCoord(graph.x1 + i, axis).toFixed(1);
       let r;
       let x = graph.x1 + i;
-      if (x > prevTextBorder) { // draw if the marks do not intersect
+      if ( x > prevTextBorder ) { // draw if the marks do not intersect
         r = ctx.measureText(txt);
         ctx.fillText(txt, x, graph.y2 + Drawer.SERIF_SIZE);
         prevTextBorder = x + r.width + Drawer.SERIF_TEXT_INDENT_X;
       }
     }
-  
+    
     ctx.textBaseline = 'middle';
     ctx.textAlign = 'end';
-  
+    
     prevTextBorder = cnv.y2;
     gridLen = graph.height / this.gridCount;
     for (let i = 0; i < graph.height; i += gridLen) {
       let txt = graph.pointYToCoord(graph.y2 - i, axis).toFixed(1);
       let r;
       let y = graph.y2 - i;
-      if (y < prevTextBorder) { // draw if the marks do not intersect
+      if ( y < prevTextBorder ) { // draw if the marks do not intersect
         r = ctx.measureText(txt);
         ctx.fillText(txt, graph.x1 - Drawer.SERIF_SIZE, y, Drawer.CANVAS_PADDING);
         prevTextBorder = y - (r.fontBoundingBoxAscent + r.fontBoundingBoxDescent) / 2 - Drawer.SERIF_TEXT_INDENT_Y;
@@ -666,12 +749,12 @@ Drawer.prototype._drawGrid = function () {
   ctx.fillStyle = Drawer.CLR_GRID_BG;
   ctx.fillRect(graph.x1, graph.y1, graph.width, graph.height);
   
-  if (this.gridCount > 0) {
+  if ( this.gridCount > 0 ) {
     ctx.strokeStyle = Drawer.CLR_GRID;
     
     // vertical grid lines
     let gridLen = graph.width / this.gridCount;
-    if (gridLen) {
+    if ( gridLen ) {
       for (let i = gridLen; i < graph.width; i += gridLen) {
         ctx.moveTo(graph.x1 + i, graph.y2);
         ctx.lineTo(graph.x1 + i, graph.y2 - graph.height);
@@ -680,7 +763,7 @@ Drawer.prototype._drawGrid = function () {
     
     // horizontal grid lines
     gridLen = graph.height / this.gridCount;
-    if (gridLen) {
+    if ( gridLen ) {
       for (let i = gridLen; i < graph.height; i += gridLen) {
         ctx.moveTo(graph.x1, graph.y2 - i);
         ctx.lineTo(graph.x1 + graph.width, graph.y2 - i);
@@ -694,11 +777,11 @@ Drawer.prototype._drawGrid = function () {
   ctx.beginPath();
   ctx.strokeStyle = Drawer.CLR_ZERO_CROSS;
   
-  if (graph.containPoint(cnvX, graph.y1)) {
+  if ( graph.containPoint(cnvX, graph.y1) ) {
     ctx.moveTo(cnvX, graph.y1);
     ctx.lineTo(cnvX, graph.y2);
   }
-  if (graph.containPoint(graph.x1, cnvY)) {
+  if ( graph.containPoint(graph.x1, cnvY) ) {
     ctx.moveTo(graph.x1, cnvY);
     ctx.lineTo(graph.x2, cnvY);
   }
@@ -710,48 +793,52 @@ Drawer.prototype.drawGraph = function () {
   let axis = this.axisCoord;
   let ctx = this.context;
   
-  if (!this.formula) {
+  if ( this.formula.length === 0 ) {
     return
   }
   
   let dx = this.quality * axis.width / graph.width;
   
-  ctx.strokeStyle = Drawer.CLR_FORMULA;
-  let first = true;
-  ctx.beginPath();
-  
-  // создаём функцию из строки. Это делается через new Function() один раз перед циклом.
-  // вместо чтобы в цикле вычислять через eval().
-  // экономия времени огромная!
-  // При создании функции с использованием new Function, её свойство [[Scope]] ссылается не на текущий LexicalEnvironment, а на window!!!!
-  let evalFunc = new Function('x', 'return ' + this.formula);
-  
-  for (let x = axis.x1; x <= axis.x2; x += dx) {
-    let y;
-    try {
-      y = evalFunc(x);
-    } catch (e) {
-      break;
+  // formula cycle
+  for (let iForm = 0; iForm < this.formula.length; iForm++) {
+    ctx.strokeStyle = this.formulaColors[iForm] || Drawer.CLR_FORMULA_DEFAULT;
+    let first = true;
+    let f = this.formula[iForm];
+    ctx.beginPath();
+    
+    // создаём функцию из строки. Это делается через new Function() один раз перед циклом.
+    // вместо чтобы в цикле вычислять через eval().
+    // экономия времени огромная!
+    // При создании функции с использованием new Function, её свойство [[Scope]] ссылается не на текущий LexicalEnvironment, а на window!!!!
+    let evalFunc = new Function('x', 'return ' + f);
+    
+    for (let x = axis.x1; x <= axis.x2; x += dx) {
+      let y;
+      try {
+        y = evalFunc(x);
+      } catch (e) {
+        break;
+      }
+      
+      if ( !isFinite(y) ) { // разрыв функции
+        first = true;
+        //	debug('infinite');
+        continue;
+      }
+      
+      // переводим числовые координаты в коорд. КАНВЫ
+      let cnvX = axis.pointXToCoord(x, graph);
+      let cnvY = axis.pointYToCoord(y, graph);
+      
+      if ( first ) { // переход к первой точке
+        ctx.moveTo(cnvX, cnvY);
+        first = false;
+      }
+      ctx.lineTo(cnvX, cnvY);
     }
     
-    if (!isFinite(y)) { // разрыв функции
-      first = true;
-      //	debug('infinite');
-      continue;
-    }
-    
-    // переводим числовые координаты в коорд. КАНВЫ
-    let cnvX = axis.pointXToCoord(x, graph);
-    let cnvY = axis.pointYToCoord(y, graph);
-    
-    if (first) { // переход к первой точке
-      ctx.moveTo(cnvX, cnvY);
-      first = false;
-    }
-    ctx.lineTo(cnvX, cnvY);
+    ctx.stroke();
   }
-  
-  ctx.stroke();
 };
 
 // -----------------------------------------------------------------------------------------------
@@ -799,18 +886,15 @@ Functions.prototype.add = function (funcJS, funcUser, descr) {
 
 // copy from start to "="
 Functions.prototype.getKey = function (index, keyName) {
-  if (keyName) {
-    return this.table[index][keyName];
-  } else {
-    return this.table[index];
-  }
+  return keyName ? this.table[index][keyName] : this.table[index];
 };
 
 Functions.prototype.correctFormula = function (formula) {
   formula.replace(' ', '');           // delete spaces
   formula = formula.toLowerCase();   // to lower case
+  formula = formula.replace('math.', ''); //
   
-  // correct all math functions andd constants
+  // correct all math functions and constants
   for (let i = 0; i < this.count; i++) {
     let rpl = this.getKey(i, 'js');
     let fnd = this.getKey(i, 'usr');

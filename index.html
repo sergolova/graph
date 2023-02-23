@@ -1,8 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<script type="text/javascript"
-        src="https://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js?ver=1.3.2"></script>
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
 <script type="text/javascript" src="helper.js"></script>
 <script type="text/javascript" src="plot.js"></script>
 <script type="text/javascript" src="graph.js"></script>
@@ -51,18 +50,32 @@
 
 			<br><br>
 
-			<span class="param-name">Формула</span>
-			<input type="text" id="formula" class="formula-input" title="Сюда вводи свой график" value="sin(x)"
-			       oninput="onInput()">
-
-			<span class="param-name" hidden>Шаг dx</span>
-			<input type="text" id="step" class="axis-input" title="Шаг dx" value="0.1" oninput="onInput()" hidden>
-			<br>
-			<span class="formula-valid" hidden>OK</span>
+			<table id="formula-table">
+				<tbody>
+				<tr>
+					<td>
+						<span class="param-name">Formula</span>
+					</td>
+					<td>
+						<input type="text" class="formula-input" title="Enter a formula here" oninput="onInput()">
+						<br>
+						<span class="formula-label">Error</span>
+					</td>
+					<td>
+						<input type="color" class="formula-color" title="Line color" oninput="onInput(false)"></td>
+					<td>
+						<div class="formula-add btn" onclick="onFormulaBtnClick(this)"></div>
+					</td>
+					<td>
+						<div class="formula-del btn" onclick="onFormulaBtnClick(this)"></div>
+					</td>
+				</tr>
+				</tbody>
+			</table>
 		</div>
 
 		<div id="table-scroll">
-			<table class="help">
+			<table id="help">
 				<!-- класс help-line будет клонироваться -->
 				<tr class="help-line" hidden>
 					<td class="help-func"></td>
@@ -72,7 +85,7 @@
 		</div>
 	</div>
 
-	<div class="info">
+	<div class="info unselectable">
 		<span class="key">Left mouse btn</span>
 		<span class="txt">Drag</span><br>
 		<span class="key">Right mouse btn</span>
