@@ -892,7 +892,7 @@ Functions.prototype.getKey = function (index, keyName) {
 Functions.prototype.correctFormula = function (formula) {
   formula.replace(' ', '');           // delete spaces
   formula = formula.toLowerCase();   // to lower case
-  formula = formula.replace('math.', ''); //
+  formula = formula.replaceAll('math.', ''); //
   
   // correct all math functions and constants
   for (let i = 0; i < this.count; i++) {

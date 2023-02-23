@@ -62,7 +62,7 @@ footer {
 
 /*some changes*/
 .container {
-    height: 200px;
+    min-height: 200px;
 }
 
 .settings {

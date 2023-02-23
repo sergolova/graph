@@ -64,7 +64,9 @@ function onFormulaBtnClick(btn) {
   let update;
   
   if ( $(btn).hasClass(CLS_FORMULA_ADD) ) { // add button
+    let rand = '#' + Math.floor(Math.random() * 16777215).toString(16);
     $btnRow.clone().appendTo($table);
+    $btnRow.children().children('.' + CLS_FORMULA_COLOR).val(rand);
     update = true;
   }
   else if ( $(btn).hasClass(CLS_FORMULA_DEL) ) { // del button
@@ -129,11 +131,12 @@ function isValid(value) {
 
 function loadElementsFromDrawer(drw) {
   $(ID_GRID_SIZE).val(drw.gridCount);
+  $(ID_LABEL_GRID).text(drw.gridCount);
   $(ID_AXIS_X1).val(drw.userCoord.x1);
   $(ID_AXIS_X2).val(drw.userCoord.x2);
   $(ID_AXIS_Y1).val(drw.userCoord.y1);
   $(ID_AXIS_Y2).val(drw.userCoord.y2);
-  $(ID_SHOW_CURSORS).val(drw.showCursors);
+  $(ID_SHOW_CURSORS).prop('checked', drw.showCursors);
   
   // reload formula list
   clearFormulaList();
@@ -160,6 +163,7 @@ function loadDrawerFromElements(drw, reload) {
   if ( !isValid(drw.gridCount) || drw.gridCount < 0 ) {
     drw.gridCount = drw.DEF_GRID_COUNT;
   }
+  $(ID_LABEL_GRID).text(drw.gridCount);
   
   drw.showCursors = $cbxCursors.is(":checked");
   axis.set(+$inpX1.val(), +$inpY1.val(), +$inpX2.val(), +$inpY2.val());
@@ -219,7 +223,12 @@ function loadDrawerFromElements(drw, reload) {
 }
 
 function loadDrawerFromCookies(drw, param) {
-  return cookieExists(param) ? drw.fromString(getCookie(param)) : false;
+  let res = cookieExists(param) ? drw.fromString(getCookie(param)) : false;
+  
+  for (let i = 0; res && i < drw.formula.length; i++) {
+    drw.formula[i] = functions.correctFormula(drw.formula[i]);
+  }
+  return res;
 }
 
 function saveDrawerToCookies(drw, param) {
