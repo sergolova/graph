@@ -33,8 +33,12 @@ header {
     text-align: center;
     font-family: "arial", sans-serif;
     font-weight: bold;
-    color: var(--color1);
+    color: var(--bg2);
     text-transform: Uppercase;
+    white-space: nowrap;
+    background-image: url("img/7.jpg");
+    background-repeat: repeat;
+    background-blend-mode: multiply;
 }
 
 h1 {
@@ -47,17 +51,21 @@ h1 {
 
 .main {
     padding: 0;
+    background-color: #ecce39;
+    min-height: 600px;
 }
 
 footer {
-    width: 100%;
-    background-color: #fff;
+    background-color: #b97b7b;
+    clear: both;
+    position: relative;
+    height: 100px;
+    /*margin-top: -200px;*/
 }
 
-.debug {
-    border: var(--color1) var(--border-size) solid;
-    padding: 2px 10px;
-    font-family: "Courier New", sans-serif;
+.wrapper {
+    width: 100%;
+    background-color: red;
 }
 
 /*some changes*/
@@ -77,14 +85,14 @@ footer {
 }
 
 #table-scroll {
-    height: 100%;
     width: 50%;
     overflow-y: scroll;
 }
 
-.help {
+#help {
     height: 100%;
     float: left;
+    border-spacing: 0;
     border-collapse: collapse;
 }
 
@@ -132,8 +140,6 @@ footer {
 }
 
 #cnv {
-    width: 100%;
-    height: 97%;
     cursor: crosshair;
 }
 
@@ -197,7 +203,7 @@ input[type=checkbox] {
 .info {
     position: absolute;
     background-color: var(--bg1);
-    height: 200px;
+    height: 100%;
     width: 300px;
     z-index: 0;
     padding: 10px;
@@ -255,6 +261,7 @@ input[type=checkbox] {
 
 #formula-table td:nth-child(1) span {
     line-height: 28px;
+    white-space: nowrap;
 }
 
 
@@ -318,4 +325,9 @@ td .btn {
 
 .btn:active {
     background-color: #fff;
+}
+
+
+.isConst {
+    color: var(--color2);
 }

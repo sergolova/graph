@@ -4,6 +4,11 @@ const NOT = 'нет';
 const DATA_INPUT_ERROR = 'ошибка ввода данных: ';
 const REDRAW_TIMEOUT = 300;
 
+const ID_TABLE_SCROLL = '#table-scroll';
+const CLS_SETTINGS = 'settings';
+
+const CLR_MIN = 0x10;
+const CLR_MAX = 0xF0;
 const CLR_DEFAULT_FORMULA = 'red';
 const ID_CANVAS = '#cnv';
 const ID_CANVAS_DIV = '#cnv-div';
@@ -33,38 +38,29 @@ const CLS_HELP_DESCR = 'help-descr';
 
 var drawer;
 var functions;
-var resizeObserver;
 
 function onError(drw, err) {
-  debug(err);
-}
-
-function createHelp() {
-  // let helpDiv = document.getElementsByClassName(ID_HELP)[0];
-  // let helpLine = document.getElementsByClassName(CLS_HELP_LINE)[0];
   //
-  // for (let i = 0; i < functions.count; i++) {
-  //   let cln = helpLine.cloneNode(true);
-  //   let helpFunc = cln.getElementsByClassName(CLS_HELP_FUNC)[0];
-  //   let helpDescr = cln.getElementsByClassName(CLS_HELP_DESCR)[0];
-  //   let fnc = functions.getKey(i);
-  //
-  //   helpFunc.innerText = fnc.usr;
-  //   helpDescr.innerText = fnc.dsc;
-  //   helpFunc.setAttribute('title', fnc.js);
-  //   cln.removeAttribute('hidden');
-  //   helpDiv.appendChild(cln);
-  // }
 }
 
 function onFormulaBtnClick(btn) {
+  let randomColor = (min = 0, max = 255) => {
+    let r = Math.floor(Math.random() * (max - min + 1) + min);
+    let g = Math.floor(Math.random() * (max - min + 1) + min);
+    let b = Math.floor(Math.random() * (max - min + 1) + min);
+    return '#' +
+      r.toString(16).padStart(2, '0') +
+      g.toString(16).padStart(2, '0') +
+      b.toString(16).padStart(2, '0');
+  };
+  
   let $table = $(ID_FORMULA_TABLE);
   let $rows = $(ID_FORMULA_TABLE + ' tr');
   let $btnRow = $(btn).parent().parent();
   let update;
   
   if ( $(btn).hasClass(CLS_FORMULA_ADD) ) { // add button
-    let rand = '#' + Math.floor(Math.random() * 16777215).toString(16);
+    let rand = randomColor(CLR_MIN, CLR_MAX);
     $btnRow.clone().appendTo($table);
     $btnRow.children().children('.' + CLS_FORMULA_COLOR).val(rand);
     update = true;
@@ -99,7 +95,6 @@ function onResizeCanvas() {
   let $lbl = $(ID_LABEL_CANVAS_SIZE);
   let $body = $('body');
   
-  // Вся канва
   let style = window.getComputedStyle(div, null);
   let h = parseInt(style.getPropertyValue("height"));
   let w = parseInt(style.getPropertyValue("width"));
@@ -107,7 +102,7 @@ function onResizeCanvas() {
   let rect = div.getBoundingClientRect();
   drawer.canvasCoord.set(0, 0, w, h - dy);
   
-  $lbl.text(`${w}\u00D7${h}`);
+  $lbl.text(`${w}\u00D7${h - dy}`);
   $cnv.attr("width", w);
   $cnv.attr("height", h - dy);
   
@@ -144,7 +139,7 @@ function loadElementsFromDrawer(drw) {
     if ( i > 0 ) {
       addFormula();
     }
-    let f = drw.formula[i].replace('Math.', '');
+    let f = drw.formula[i].replaceAll('Math.', ''); //without MATH
     $(ID_FORMULA_TABLE + ' tr:last .' + CLS_FORMULA_INPUT).val(f);
     $(ID_FORMULA_TABLE + ' tr:last .' + CLS_FORMULA_COLOR).val(drw.formulaColors[i] || CLR_DEFAULT_FORMULA);
   }
@@ -180,9 +175,12 @@ function loadDrawerFromElements(drw, reload) {
     
     try {
       {
-        let x;
-        let y = new Function('x', f);
+        let evalFunc;
+        let x = drw.userCoord.x1 || 0;
+        evalFunc = new Function('x', 'return ' + f);
+        let y = evalFunc(x);
       }
+  
       $lbl.removeClass(CLS_FORMULA_INVALID);
       $formulaInp.removeClass(CLS_ERROR_INPUT);
       drw.formulaColors.push($colorInp.val());
@@ -197,8 +195,8 @@ function loadDrawerFromElements(drw, reload) {
   // check axis
   let $arr = [$inpX1, $inpY1, $inpX2, $inpY2];
   for (let i = 0; i < $arr.length; i++) {
-    axis.setInd(i, +$arr[i].val());
-    if ( isValid(axis.getInd(i)) ) {
+    axis.toArray(i, +$arr[i].val());
+    if ( isValid(axis.toArray(i)) ) {
       $arr[i].removeClass(CLS_ERROR_INPUT);
     }
     else {
@@ -206,14 +204,17 @@ function loadDrawerFromElements(drw, reload) {
     }
   }
   
-  if ( axis.isValid() ) {
+  if ( axis.deltaX <= 0 ) {
+    $inpX1.addClass(CLS_ERROR_INPUT);
+    $inpX2.addClass(CLS_ERROR_INPUT);
+  }
+  else if ( axis.deltaY <= 0 ) {
+    $inpY1.addClass(CLS_ERROR_INPUT);
+    $inpY2.addClass(CLS_ERROR_INPUT);
+  }
+  else if ( axis.isValid() ) {
     drw.userCoord.copyFrom(axis)
     saveDrawerToCookies(drw, DRAWER_COOKIE);
-  }
-  else {
-    for (let i = 0; i < $arr.length; i++) {
-      $arr[i].addClass(CLS_ERROR_INPUT);
-    }
   }
   
   if ( reload !== false ) {
@@ -237,25 +238,54 @@ function saveDrawerToCookies(drw, param) {
   setCookie(param, s, COOKIE_LIFE);
 }
 
+function createHelp() {
+  let $helpLine = $(ID_HELP + ' .' + CLS_HELP_LINE);
+  
+  for (let i = 0; i < functions.count; i++) {
+    let $cln = $helpLine.clone();
+    let $helpFunc = $cln.children('.' + CLS_HELP_FUNC);
+    let $helpDescr = $cln.children('.' + CLS_HELP_DESCR);
+    let fnc = functions.getKey(i);
+    
+    if ( fnc.cnts ) {
+      $cln.addClass('isConst');
+    }
+    
+    let title;
+    if ( fnc.cnts ) {
+      let f = new Function('', 'return ' + fnc.js);
+      title = `Const ${fnc.js} = ${f().toFixed(4)}...`;
+    }
+    else {
+      title = `Function ${fnc.js}(x)`;
+    }
+    
+    $helpFunc.text(fnc.usr).attr('title', title);
+    $helpDescr.text(fnc.dsc).attr('title', title);
+    $cln.removeAttr('hidden');
+    $(ID_HELP).append($cln);
+  }
+}
+
 function loadPage() {
   functions = new Functions();
   createHelp();
   drawer = new Drawer('cnv');
   drawer.onError = onError;
   
-  resizeObserver = new ResizeObserver(entries => {
+  // canvas size updater, the resize icon updater
+  let resizeCanvasObserver = new ResizeObserver(entries => {
     onResizeCanvas();
   });
-  resizeObserver.observe($(ID_CANVAS_DIV)[0]);
-  resizeObserver.observe($('body')[0]);
+  resizeCanvasObserver.observe($(ID_CANVAS_DIV)[0]);
+  resizeCanvasObserver.observe($('body')[0]);
+  
+  // the help table size updater
+  let resizeSettingsObserver = new ResizeObserver(entries => {
+    $(ID_TABLE_SCROLL).outerHeight($("." + CLS_SETTINGS).outerHeight());
+  });
+  resizeSettingsObserver.observe($("." + CLS_SETTINGS)[0]);
   
   loadDrawerFromCookies(drawer, DRAWER_COOKIE);
   loadElementsFromDrawer(drawer);
-  onResizeCanvas(); // <= redraw here
-}
-
-function debug(msg) {
-  let lbl = $("#dbg");
-  lbl[0].innerText = msg;
-  console.log(msg);
 }

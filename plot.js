@@ -75,15 +75,28 @@ Coord.prototype.set = function (x1, y1, x2, y2) {
   this.set2(x2, y2);
 };
 
-Coord.prototype.setInd = function (index, value) {
-  this.x1 = index === 0 ? value : this.x1;
-  this.y1 = index === 1 ? value : this.y1;
-  this.x2 = index === 2 ? value : this.x2;
-  this.y2 = index === 3 ? value : this.y2;
-};
-
-Coord.prototype.getInd = function (index) {
-  return [this.x1, this.y1, this.x2, this.y2][index]
+/**
+ *  Universal function
+ *  toArray() - return array of coord [x1,y1,x2,y2]
+ *  toArray(index) - return coord[index]
+ *  toArray(index,value) - set coord at index
+ *
+ * */
+Coord.prototype.toArray = function (index, value) {
+  if ( index !== undefined ) {
+    if ( value !== undefined ) { // set value at index
+      this.x1 = index === 0 ? value : this.x1;
+      this.y1 = index === 1 ? value : this.y1;
+      this.x2 = index === 2 ? value : this.x2;
+      this.y2 = index === 3 ? value : this.y2;
+    }
+    else { // get value at index
+      return [this.x1, this.y1, this.x2, this.y2][index];
+    }
+  }
+  else { // get array
+    return [this.x1, this.y1, this.x2, this.y2]
+  }
 };
 
 // coord - в какую систему преобразовуем
@@ -104,13 +117,13 @@ Coord.prototype.containPoint = function (x, y) {
 Coord.prototype.normalize = function () {
   let tmp;
   
-  if (this.isInverterX) {
+  if ( this.isInverterX ) {
     tmp = this.x2;
     this.x2 = this.x1;
     this.x1 = tmp;
   }
   
-  if (this.isInverterY) {
+  if ( this.isInverterY ) {
     tmp = this.y2;
     this.y2 = this.y1;
     this.y1 = tmp;
@@ -118,8 +131,12 @@ Coord.prototype.normalize = function () {
 };
 
 Coord.prototype.dbg = function (prefix) {
-  prefix = (prefix) ? (prefix + ': ') : '';
-  console.log(prefix + this.constructor.name + '(x1=' + this.x1.toFixed(1) + ', y1=' + this.y1.toFixed(1) + '; x2=' + this.x2.toFixed(1) + ', y2=' + this.y2.toFixed(1));
+  let s = `(x1=$0, y1=$1, x2=$2, y2=$3)`;
+  this.toArray().forEach((e, i) => {
+    s = s.replace('$' + i, e.toFixed(1))
+  });
+  
+  console.log(((prefix) ? (prefix + ': ') : '') + this.constructor.name + s);
 };
 
 Point = function (x, y) {

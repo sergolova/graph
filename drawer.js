@@ -54,10 +54,10 @@ function Drawer(canvasID) {
   
   this.context = null;
   this.curPoint = new Point();          // cursor point. Relative to the upper left corner of the canvas
-  this.userCoord = new Coord(-10, -10, 10, 10);   // Вычислительная система координат, заданная пользователем
+  this.userCoord = new Coord();   // Вычислительная система координат, заданная пользователем
   this.axisCoord = new Coord();   // Текущая вычислительная система координат в зависимости от Zoom или Drag.
   this.graphCoord = new Coord();  // Размеры канвы графика. Вычисляется
-  this.canvasCoord = new Coord(0, 0, 1000, 1000); // Размеры всей канвы для рисования
+  this.canvasCoord = new Coord(); // Размеры всей канвы для рисования
   this.canvasData = null;
   this.formula = [];
   this.formulaColors = [];
@@ -81,10 +81,7 @@ function Drawer(canvasID) {
   this._zoom = {
     begin: false,
     timer: null,
-    deltaX1: 0,
-    deltaX2: 0,
-    deltaY1: 0,
-    deltaY2: 0,
+    delta: null,
     iterator: 0
   };
   
@@ -118,12 +115,12 @@ Drawer.prototype.fromString = function (str) {
         num++;
       }
     }
-    this.reload();
+    this.reload(false);
   }
   return num > 0; // or num===this._JSONFields.length
 };
 
-Drawer.prototype.reload = function (needRedraw = false) {
+Drawer.prototype.reload = function (needRedraw) {
   this.axisCoord.copyFrom(this.userCoord);
   this.graphCoord.copyFrom(this.canvasCoord);
   this.graphCoord.modify(+Drawer.CANVAS_PADDING, +Drawer.CANVAS_PADDING, -Drawer.CANVAS_PADDING, -Drawer.CANVAS_PADDING);
@@ -246,7 +243,7 @@ Drawer.prototype.onCanvasContextMenu = function () {
 };
 
 Drawer.prototype.onCanvasDoubleClick = function () {
-  this.reload();
+  this.reload(true);
 };
 
 Drawer.prototype.onMouseWheel = function () {
@@ -269,6 +266,7 @@ Drawer.prototype.onMouseWheel = function () {
   this.onSelEnd();
   this.redraw();
   this.onCanvasMouseMove();
+  event.preventDefault();
 };
 
 Drawer.prototype.onZoomStart = function () {
@@ -289,25 +287,21 @@ Drawer.prototype.onZoomStart = function () {
   else {
     // need zoom
     sel.normalize();
-    
+  
     // так как зум анимированный и будет проходить this.zoomStep итераций,
     // нам нужно вычислить дельту для каждой координаты для одной итерации
     // получаем разницу между начальной и конечной координатой и делим её на this.zoomStep.
     // для передачи дельт между функциями используем onZoom как объект
-    
+  
     let zoomCoord = this.selToAxis();
     zoomCoord.normalize();
     zoomCoord.dbg('zoom');
-    this._zoom.deltaX1 = Math.abs(axis.x1 - zoomCoord.x1) / this.zoomStep;
-    this._zoom.deltaX2 = Math.abs(axis.x2 - zoomCoord.x2) / this.zoomStep;
-    this._zoom.deltaY1 = Math.abs(axis.y1 - zoomCoord.y1) / this.zoomStep;
-    this._zoom.deltaY2 = Math.abs(axis.y2 - zoomCoord.y2) / this.zoomStep;
-    
-    debug('dx1=' + this._zoom.deltaX1.toFixed(1) +
-      ' dy1=' + this._zoom.deltaY1.toFixed(1) +
-      ' dx2=' + this._zoom.deltaX2.toFixed(1) +
-      ' dy2=' + this._zoom.deltaY2.toFixed(1));
-    
+    this._zoom = new Coord(
+      Math.abs(axis.x1 - zoomCoord.x1) / this.zoomStep,
+      Math.abs(axis.y1 - zoomCoord.y1) / this.zoomStep,
+      Math.abs(axis.x2 - zoomCoord.x2) / this.zoomStep,
+      Math.abs(axis.y2 - zoomCoord.y2) / this.zoomStep);
+  
     this._zoom.iterator = 0; // strip
     this.quality = Drawer.LOW_QUALITY; // decrease quality for speed
     clearTimeout(this._zoom.timer);
@@ -330,10 +324,10 @@ Drawer.prototype.onZoom = function () {
     return;
   }
   
-  this.axisCoord.x1 += Math.abs(this._zoom.deltaX1);
-  this.axisCoord.x2 -= Math.abs(this._zoom.deltaX2);
-  this.axisCoord.y1 += Math.abs(this._zoom.deltaY1);
-  this.axisCoord.y2 -= Math.abs(this._zoom.deltaY2);
+  this.axisCoord.modify(
+    +Math.abs(this._zoom.x1), +Math.abs(this._zoom.y1),
+    -Math.abs(this._zoom.x2), -Math.abs(this._zoom.y2));
+  
   this.axisCoord.normalize();
   this.axisCoord.dbg('step ' + this._zoom.iterator);
   this.redraw(); // redraw with small dx ()
@@ -822,7 +816,6 @@ Drawer.prototype.drawGraph = function () {
       
       if ( !isFinite(y) ) { // разрыв функции
         first = true;
-        //	debug('infinite');
         continue;
       }
       
@@ -846,14 +839,14 @@ Drawer.prototype.drawGraph = function () {
 // -----------------------------------------------------------------------------------------------
 function Functions() {
   this.table = [];
-  this.add('Math.E', 'e', 'The mathematical constant e');
-  this.add('Math.LN10', 'ln10', 'The natural logarithm of 10');
-  this.add('Math.LN2', 'ln2', 'The base-2 logarithm of e');
-  this.add('Math.LOG2E', 'log2e', 'The base-10 logarithm of e');
-  this.add('Math.LOG10E', 'log10e', 'The base-10 logarithm of e');
-  this.add('Math.PI', 'pi', 'This is the ratio of the circumference of a circle to its diameter.');
-  this.add('Math.SQRT1_2', 'sqrt12', 'The square root of 0.5, or equivalently one divided by the square root of 2');
-  this.add('Math.SQRT2', 'sqrt2', 'The square root of 2');
+  this.add('Math.E', 'e', 'The mathematical constant e', true);
+  this.add('Math.LN10', 'ln10', 'The natural logarithm of 10', true);
+  this.add('Math.LN2', 'ln2', 'The base-2 logarithm of e', true);
+  this.add('Math.LOG2E', 'log2e', 'The base-10 logarithm of e', true);
+  this.add('Math.LOG10E', 'log10e', 'The base-10 logarithm of e', true);
+  this.add('Math.PI', 'pi', 'This is the ratio of the circumference of a circle to its diameter.', true);
+  this.add('Math.SQRT1_2', 'sqrt12', 'The square root of 0.5, or equivalently one divided by the square root of 2', true);
+  this.add('Math.SQRT2', 'sqrt2', 'The square root of 2', true);
   this.add('Math.abs', 'abs', 'Returns the absolute value of a number');
   this.add('Math.acos', 'acos', 'Returns the arc cosine (or inverse cosine) of a number');
   this.add('Math.asin', 'asin', 'Returns the arcsine of a number');
@@ -880,8 +873,8 @@ function Functions() {
   });
 }
 
-Functions.prototype.add = function (funcJS, funcUser, descr) {
-  this.table.push({js: funcJS, usr: funcUser, dsc: descr});
+Functions.prototype.add = function (funcJS, funcUser, descr, isConst) {
+  this.table.push({js: funcJS, usr: funcUser, dsc: descr, cnts: (isConst === true)});
 };
 
 // copy from start to "="
@@ -890,7 +883,7 @@ Functions.prototype.getKey = function (index, keyName) {
 };
 
 Functions.prototype.correctFormula = function (formula) {
-  formula.replace(' ', '');           // delete spaces
+  formula.replaceAll(' ', '');           // delete spaces
   formula = formula.toLowerCase();   // to lower case
   formula = formula.replaceAll('math.', ''); //
   
@@ -900,7 +893,7 @@ Functions.prototype.correctFormula = function (formula) {
     let fnd = this.getKey(i, 'usr');
     
     fnd = new RegExp('(?:^|\\b)(' + fnd + ')(?=\\b|$)', 'gi');
-    formula = formula.replace(fnd, rpl);
+    formula = formula.replaceAll(fnd, rpl);
   }
   return formula;
 };
