@@ -93,7 +93,7 @@ function Drawer(canvasID) {
   
   // call when constructing prototype!
   this.setEvents();
-};
+}
 
 Drawer.prototype.toString = function () {
   return JSON.stringify(this, this._JSONFields.split`,`);

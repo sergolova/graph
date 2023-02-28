@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html lang="en">
 
-<script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.3/jquery.min.js"></script>
+
+<!--<script src="https://code.jquery.com/jquery-3.6.3.min.js" integrity="sha256-pvPw+upLPUjgMXY0G+8O0xUf+/Im1MZjXxxgOcBQBXU=" crossorigin="anonymous"></script>-->
+<script type="text/javascript" src="jquery3.6.3.js"></script>
 <script type="text/javascript" src="helper.js"></script>
 <script type="text/javascript" src="plot.js"></script>
 <script type="text/javascript" src="graph.js"></script>
@@ -18,24 +20,39 @@
 <header>
 	<h1>Graph builder</h1>
 </header>
-<div class="main">
+<main>
 	<div class="container clearfix">
 		<div class="settings">
-			<span class="param-name">Х-axis start</span>
-			<input type="text" id="axis-X-start" class="axis-input" oninput="onInput()" value="-10">
-			<span class="param-name">Х-axis end</span>
-			<input type="text" id="axis-X-end" class="axis-input" oninput="onInput()" value="+10">
+			<label for="axis-X-start" class="param-name">
+				Х-axis start
+				<input type="text" id="axis-X-start" class="axis-input" oninput="onInput()" value="-10">
+			</label>
+
+			<label for="axis-X-end" class="param-name">
+				Х-axis end
+				<input type="text" id="axis-X-end" class="axis-input" oninput="onInput()" value="+10">
+			</label>
+
 			<br><br>
 
-			<span class="param-name">Y-axis start</span>
-			<input type="text" id="axis-Y-start" class="axis-input" oninput="onInput()" value="-10">
-			<span class="param-name">Y-axis end</span>
-			<input type="text" id="axis-Y-end" class="axis-input" oninput="onInput()" value="+10">
+			<label for="axis-Y-start" class="param-name">
+				Y-axis start
+				<input type="text" id="axis-Y-start" class="axis-input" oninput="onInput()" value="-10">
+			</label>
+
+
+			<label for="axis-Y-end" class="param-name">
+				Y-axis end
+				<input type="text" id="axis-Y-end" class="axis-input" oninput="onInput()" value="+10">
+			</label>
+
 			<br><br>
 
-			<span class="param-name">Grid rate</span>
-			<input type="range" id="grid-size" class="range-input" min="0" max="30" step="5" value="10"
-			       oninput="onInput(false)">
+			<label for="grid-size" class="param-name">
+				Grid rate
+				<input type="range" id="grid-size" class="range-input" min="0" max="30" step="5" value="10"
+				       oninput="onInput(false)">
+			</label>
 			<span id="lbl-grid-size" class="lbl-value">10</span>
 
 			<div class="cur-div param-name">
@@ -98,18 +115,23 @@
 			<span class="txt">Zoom Y</span><br>
 			<span class="key">Left mouse dbl click</span>
 			<span class="txt">Undo zoom</span><br>
+			<span class="key imgkey">
+				<img src="img/resize.png" alt="">
+			</span>
+			<span class="txt">Resize graph</span><br>
 		</div>
 
 		<div id="cnv-div">
-			<span id="lbl-cnv-size" class="lbl-value unselectable">100 x 100</span>
+			<span id="lbl-graph-size" class="lbl-value unselectable">100 x 100</span>
 			<canvas id="cnv">
 			</canvas>
 		</div>
 	</div>
-</div>
+</main>
 
 <footer>
-
+	<span>2023 © Golovanov Sergey</span> <br>
+	<span>Сайт работает на честном слове с помощью какой-то матери</span>
 </footer>
 
 </body>

@@ -12,7 +12,7 @@ const CLR_MAX = 0xF0;
 const CLR_DEFAULT_FORMULA = 'red';
 const ID_CANVAS = '#cnv';
 const ID_CANVAS_DIV = '#cnv-div';
-const ID_LABEL_CANVAS_SIZE = '#lbl-cnv-size';
+const ID_LABEL_GRAPH_SIZE = '#lbl-graph-size';
 const ID_GRID_SIZE = '#grid-size';
 const ID_LABEL_GRID = '#lbl-grid-size';
 const ID_SHOW_CURSORS = "#show-cursors";
@@ -25,6 +25,7 @@ const CLS_FORMULA_INVALID = 'formula-invalid';
 const CLS_ERROR_INPUT = 'input-error';
 const CLS_FORMULA_ADD = 'formula-add';
 const CLS_FORMULA_DEL = 'formula-del';
+const CLS_IS_CONST = 'isConst';
 
 const ID_AXIS_X1 = '#axis-X-start';
 const ID_AXIS_X2 = '#axis-X-end';
@@ -90,28 +91,28 @@ function clearFormulaList() {
 // События от контролов разнесены на две функции из-за того, что при изменении размеров
 // канвы всё изображение стирается и получается мерцание. Зачем лишний раз мерцать?!
 function onResizeCanvas() {
-  let $cnv = $(ID_CANVAS);
-  let div = $(ID_CANVAS_DIV)[0];
-  let $lbl = $(ID_LABEL_CANVAS_SIZE);
-  let $body = $('body');
+  try {
+    let $cnv = $(ID_CANVAS);
+    let div = $(ID_CANVAS_DIV)[0];
+    let $lbl = $(ID_LABEL_GRAPH_SIZE);
+    
+    let divStyle = window.getComputedStyle(div, null);
+    let h = parseInt(divStyle.getPropertyValue("height"));
+    let w = parseInt(divStyle.getPropertyValue("width"));
+    const dy = 12;
+    drawer.canvasCoord.set(0, 0, w, h - dy);
+    
+    $cnv.attr("width", w);
+    $cnv.attr("height", h - dy);
+    
+    drawer.reload(false);
+    drawer.redrawTimeout(drawer, 0);
+    
+    // ! after drawer.reload
+    $lbl.text(`${drawer.graphCoord.width}\u00D7${drawer.graphCoord.height}`);
+  } catch (err) {
   
-  let style = window.getComputedStyle(div, null);
-  let h = parseInt(style.getPropertyValue("height"));
-  let w = parseInt(style.getPropertyValue("width"));
-  const dy = 12;
-  let rect = div.getBoundingClientRect();
-  drawer.canvasCoord.set(0, 0, w, h - dy);
-  
-  $lbl.text(`${w}\u00D7${h - dy}`);
-  $cnv.attr("width", w);
-  $cnv.attr("height", h - dy);
-  
-  // move the Resize icon at bottom-right corner
-  $body.css('background-position-x', Math.trunc(rect.x + w + window.scrollX) + 'px');
-  $body.css('background-position-y', Math.trunc(rect.y + h + window.scrollY) + 'px');
-  
-  drawer.reload(false);
-  drawer.redrawTimeout(drawer, 0);
+  }
 }
 
 
@@ -178,7 +179,7 @@ function loadDrawerFromElements(drw, reload) {
         let evalFunc;
         let x = drw.userCoord.x1 || 0;
         evalFunc = new Function('x', 'return ' + f);
-        let y = evalFunc(x);
+        evalFunc(x);
       }
   
       $lbl.removeClass(CLS_FORMULA_INVALID);
@@ -246,20 +247,29 @@ function createHelp() {
     let $helpFunc = $cln.children('.' + CLS_HELP_FUNC);
     let $helpDescr = $cln.children('.' + CLS_HELP_DESCR);
     let fnc = functions.getKey(i);
-    
+  
     if ( fnc.cnts ) {
-      $cln.addClass('isConst');
+      $cln.addClass(CLS_IS_CONST);
     }
-    
+  
     let title;
+    let args;
+    if ( fnc.dsc && fnc.dsc[0] === '(' ) {
+      let m = fnc.dsc.match(/\((.*?)\)/g);
+      args = m[0];
+    }
+    else {
+      args = '(x)';
+    }
+  
     if ( fnc.cnts ) {
       let f = new Function('', 'return ' + fnc.js);
       title = `Const ${fnc.js} = ${f().toFixed(4)}...`;
     }
     else {
-      title = `Function ${fnc.js}(x)`;
+      title = `Function ${fnc.js}${args}`;
     }
-    
+  
     $helpFunc.text(fnc.usr).attr('title', title);
     $helpDescr.text(fnc.dsc).attr('title', title);
     $cln.removeAttr('hidden');
@@ -274,14 +284,14 @@ function loadPage() {
   drawer.onError = onError;
   
   // canvas size updater, the resize icon updater
-  let resizeCanvasObserver = new ResizeObserver(entries => {
+  let resizeCanvasObserver = new ResizeObserver(() => {
     onResizeCanvas();
   });
   resizeCanvasObserver.observe($(ID_CANVAS_DIV)[0]);
   resizeCanvasObserver.observe($('body')[0]);
   
   // the help table size updater
-  let resizeSettingsObserver = new ResizeObserver(entries => {
+  let resizeSettingsObserver = new ResizeObserver(() => {
     $(ID_TABLE_SCROLL).outerHeight($("." + CLS_SETTINGS).outerHeight());
   });
   resizeSettingsObserver.observe($("." + CLS_SETTINGS)[0]);
