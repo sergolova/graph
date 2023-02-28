@@ -12,6 +12,8 @@ Drawer.SERIF_TEXT_INDENT_X = 5;
 Drawer.SERIF_TEXT_INDENT_Y = 5;
 Drawer.WHEEL_PERCENT = 10;
 Drawer.ZOOM_CURSOR_TIMEOUT = 300;
+Drawer.DEFAULT_FORMULA = 'Math.sin(x)';
+Drawer.DEFAULT_COORD = [-10, -10, 10, 10];
 
 Drawer.CUR_DRAG = 'grab';
 Drawer.CUR_NORMAL = 'crosshair';
@@ -54,13 +56,13 @@ function Drawer(canvasID) {
   
   this.context = null;
   this.curPoint = new Point();          // cursor point. Relative to the upper left corner of the canvas
-  this.userCoord = new Coord();   // Вычислительная система координат, заданная пользователем
+  this.userCoord = new Coord(...Drawer.DEFAULT_COORD);   // Вычислительная система координат, заданная пользователем
   this.axisCoord = new Coord();   // Текущая вычислительная система координат в зависимости от Zoom или Drag.
   this.graphCoord = new Coord();  // Размеры канвы графика. Вычисляется
   this.canvasCoord = new Coord(); // Размеры всей канвы для рисования
   this.canvasData = null;
-  this.formula = [];
-  this.formulaColors = [];
+  this.formula = [Drawer.DEFAULT_FORMULA];
+  this.formulaColors = [Drawer.CLR_FORMULA_DEFAULT];
   this.showCursors = true;
   this.gridCount = Drawer.DEF_GRID_COUNT;
   this.zoomStep = Drawer.DEF_ZOOM_STEP;
